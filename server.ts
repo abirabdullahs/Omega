@@ -68,7 +68,7 @@ app.prepare().then(() => {
 
         if (!oldMessagesSnapshot.empty) {
           const batch = db.batch();
-          oldMessagesSnapshot.docs.forEach((doc) => {
+          oldMessagesSnapshot.docs.forEach((doc: any) => {
             batch.delete(doc.ref);
           });
           await batch.commit();
