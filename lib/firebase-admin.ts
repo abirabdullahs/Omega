@@ -1,8 +1,35 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import path from "path";
 import { applicationDefault, cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+
+function getServiceAccountPath() {
+  const explicitPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (explicitPath) {
+    const resolvedPath = path.isAbsolute(explicitPath)
+      ? explicitPath
+      : path.resolve(process.cwd(), explicitPath);
+
+    if (existsSync(resolvedPath)) {
+      return resolvedPath;
+    }
+
+    throw new Error(`Google credentials file not found at ${resolvedPath}`);
+  }
+
+  const rootDir = process.cwd();
+  const candidateFiles = [
+    path.resolve(rootDir, "firebase-service-account.json"),
+    path.resolve(rootDir, "firebase-service-account.js"),
+  ];
+
+  const matchingFiles = readdirSync(rootDir)
+    .filter((fileName) => /firebase|service-account|service_account/i.test(fileName) && /\.json$/i.test(fileName))
+    .map((fileName) => path.resolve(rootDir, fileName));
+
+  return [...candidateFiles, ...matchingFiles].find((filePath) => existsSync(filePath)) || null;
+}
 
 function getServiceAccount() {
   const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
@@ -19,22 +46,9 @@ function getServiceAccount() {
     }
   }
 
-  const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (credentialsPath) {
-    const resolvedPath = path.isAbsolute(credentialsPath)
-      ? credentialsPath
-      : path.resolve(process.cwd(), credentialsPath);
-
-    if (existsSync(resolvedPath)) {
-      return JSON.parse(readFileSync(resolvedPath, "utf8"));
-    }
-
-    throw new Error(`Google credentials file not found at ${resolvedPath}`);
-  }
-
-  const localFile = path.resolve(process.cwd(), "firebase-service-account.json");
-  if (existsSync(localFile)) {
-    return JSON.parse(readFileSync(localFile, "utf8"));
+  const serviceAccountPath = getServiceAccountPath();
+  if (serviceAccountPath) {
+    return JSON.parse(readFileSync(serviceAccountPath, "utf8"));
   }
 
   return null;
