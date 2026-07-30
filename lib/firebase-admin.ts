@@ -22,10 +22,11 @@ function getServiceAccountPath() {
   const candidateFiles = [
     path.resolve(rootDir, "firebase-service-account.json"),
     path.resolve(rootDir, "firebase-service-account.js"),
+    path.resolve(rootDir, "omega-90935-firebase-adminsdk-fbsvc-c1f8995154.json"),
   ];
 
   const matchingFiles = readdirSync(rootDir)
-    .filter((fileName) => /firebase|service-account|service_account/i.test(fileName) && /\.json$/i.test(fileName))
+    .filter((fileName) => /firebase|service-account|service_account|adminsdk/i.test(fileName) && /\.json$/i.test(fileName))
     .map((fileName) => path.resolve(rootDir, fileName));
 
   return [...candidateFiles, ...matchingFiles].find((filePath) => existsSync(filePath)) || null;
