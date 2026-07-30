@@ -1,0 +1,6 @@
+{
+  "name": "Omega",
+  "description": "Premium mentorship platform by Abir Hossen Abdullah (abirabdullah.me). Manage students, tasks, and progress with ease.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

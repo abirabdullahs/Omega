@@ -1,0 +1,47 @@
+{
+  "collections": {
+    "users": {
+      "phone": "string",
+      "name": "string",
+      "role": "string",
+      "passwordChanged": "boolean"
+    },
+    "tasks": {
+      "title": "string",
+      "contentMarkdown": "string",
+      "createdAt": "timestamp",
+      "createdBy": "string",
+      "deadline": "timestamp"
+    },
+    "submissions": {
+      "subcollections": {
+        "entries": {
+          "text": "string",
+          "submittedAt": "timestamp",
+          "grade": "string",
+          "feedback": "string",
+          "studentId": "string"
+        }
+      }
+    },
+    "notices": {
+      "title": "string",
+      "content": "string",
+      "targetLink": "string",
+      "createdAt": "timestamp"
+    },
+    "requests": {
+      "userId": "string",
+      "requestedChapters": "array",
+      "createdAt": "timestamp",
+      "status": "string"
+    },
+    "assignments": {
+      "userId": "string",
+      "chapters": "object",
+      "deadline": "timestamp",
+      "status": "string",
+      "createdAt": "timestamp"
+    }
+  }
+}
