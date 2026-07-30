@@ -4,7 +4,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Link from "next/link";
-import { BookOpen, Bell, LogOut, Layout } from "lucide-react";
+import { BookOpen, Bell, LogOut, Layout, MessageSquare } from "lucide-react";
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading, logout } = useAuth();
@@ -27,6 +27,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   const navItems = [
     { name: "My Tasks", href: "/student", icon: BookOpen },
+    { name: "Live Chat", href: "/student/chat", icon: MessageSquare },
     { name: "Course Plan", href: "/student/plan", icon: Layout },
     { name: "Notice Board", href: "/student/notices", icon: Bell },
   ];

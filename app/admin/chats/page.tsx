@@ -1,0 +1,119 @@
+'use client';
+
+import { useState, useEffect } from "react";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/auth-provider";
+import ChatInterface from "@/components/chat-interface";
+import { Search, User, MessageCircle } from "lucide-react";
+
+interface Student {
+  id: string;
+  name?: string;
+  phone: string;
+}
+
+export default function AdminChatDashboard() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [search, setSearch] = useState("");
+  const { user, userData } = useAuth();
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const q = query(collection(db, "users"), where("role", "==", "student"));
+        const snap = await getDocs(q);
+        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+      } catch (err) {
+        console.error("Error fetching students:", err);
+      }
+    };
+    fetchStudents();
+  }, []);
+
+  const filteredStudents = students.filter(s => 
+    (s.name?.toLowerCase().includes(search.toLowerCase())) || 
+    (s.phone.includes(search))
+  );
+
+  if (!user || !userData) return null;
+
+  return (
+    <div className="h-[calc(100vh-12rem)] flex flex-col space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-neutral-900">Live Support</h2>
+        <p className="text-neutral-500 text-sm">Chat in real-time with students.</p>
+      </div>
+
+      <div className="flex-1 flex gap-8 min-h-0">
+        {/* Sidebar: Student List */}
+        <div className="w-80 flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-neutral-100 bg-neutral-50/30">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                placeholder="Search students..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-neutral-100 rounded-xl text-xs focus:ring-2 focus:ring-neutral-900 transition-all outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto divide-y divide-neutral-50">
+            {filteredStudents.length === 0 ? (
+              <div className="p-8 text-center text-xs text-neutral-400">No students found.</div>
+            ) : (
+              filteredStudents.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedStudent(s)}
+                  className={`w-full p-4 flex items-center space-x-3 transition-all hover:bg-neutral-50 text-left ${
+                    selectedStudent?.id === s.id ? 'bg-neutral-50 border-r-4 border-neutral-900' : ''
+                  }`}
+                >
+                  <div className="w-10 h-10 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-500 font-bold text-xs shrink-0">
+                    {s.name ? s.name[0] : "S"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-neutral-900 truncate">{s.name || "Unnamed"}</p>
+                    <p className="text-[10px] text-neutral-400 font-medium">{s.phone}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Chat Area */}
+        <div className="flex-1 min-h-0">
+          {selectedStudent ? (
+            <div className="h-full flex flex-col">
+              <div className="flex-1">
+                <ChatInterface 
+                  roomId={selectedStudent.id} 
+                  currentUser={{
+                    uid: user.uid,
+                    name: userData.name || "Admin",
+                    role: "admin"
+                  }} 
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center bg-white rounded-3xl border border-neutral-100 border-dashed text-center p-12 space-y-4">
+              <div className="w-16 h-16 bg-neutral-50 rounded-full flex items-center justify-center">
+                <MessageCircle size={32} className="text-neutral-300" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-neutral-900">Select a Conversation</h3>
+                <p className="text-sm text-neutral-500 max-w-xs mx-auto">Choose a student from the left to start a real-time support session.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
