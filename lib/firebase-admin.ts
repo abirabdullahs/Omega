@@ -10,7 +10,12 @@ function getServiceAccount() {
     try {
       return JSON.parse(envJson);
     } catch (error) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.");
+      try {
+        const normalized = envJson.replace(/\\n/g, "\n");
+        return JSON.parse(normalized);
+      } catch {
+        throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.");
+      }
     }
   }
 
