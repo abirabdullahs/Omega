@@ -37,52 +37,87 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col">
-        <div className="p-6 border-b border-neutral-100">
-          <h1 className="text-xl font-bold text-neutral-900 tracking-tight flex items-center">
-            <span className="bg-amber-500 w-2 h-6 mr-2 rounded-full"></span>
-            Omega Admin
-          </h1>
-          <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Management Portal</p>
-        </div>
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
-                  isActive 
-                    ? "bg-neutral-900 text-white" 
-                    : "text-neutral-600 hover:bg-neutral-100"
-                }`}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-4 border-t border-neutral-100">
-          <button
-            onClick={() => logout()}
-            className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-          >
-            <LogOut className="w-5 h-5 mr-3" />
-            Logout
-          </button>
-        </div>
-      </aside>
+    <div className="min-h-screen bg-neutral-50">
+      <div className="md:flex">
+        {/* Sidebar for desktop */}
+        <aside className="hidden md:flex w-64 bg-white border-r border-neutral-200 flex-col">
+          <div className="p-6 border-b border-neutral-100">
+            <h1 className="text-xl font-bold text-neutral-900 tracking-tight flex items-center">
+              <span className="bg-amber-500 w-2 h-6 mr-2 rounded-full"></span>
+              Omega Admin
+            </h1>
+            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Management Portal</p>
+          </div>
+          <nav className="flex-1 p-4 space-y-1">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                    isActive 
+                      ? "bg-neutral-900 text-white" 
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="p-4 border-t border-neutral-100">
+            <button
+              onClick={() => logout()}
+              className="flex items-center w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              <LogOut className="w-5 h-5 mr-3" />
+              Logout
+            </button>
+          </div>
+        </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-8 max-w-6xl mx-auto">
-          {children}
-        </div>
-      </main>
+        <main className="flex-1 overflow-auto">
+          <div className="bg-white border-b border-neutral-200 p-4 md:hidden">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-bold text-neutral-900">Omega Admin</h1>
+                <p className="text-xs text-neutral-500">Management Portal</p>
+              </div>
+              <button
+                onClick={() => logout()}
+                className="text-red-600 text-sm font-medium"
+              >
+                Logout
+              </button>
+            </div>
+            <nav className="mt-4 overflow-x-auto">
+              <div className="flex gap-2 whitespace-nowrap">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-medium transition-colors ${
+                        isActive ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                      }`}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+              </div>
+            </nav>
+          </div>
+
+          <div className="p-4 md:p-8 max-w-6xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

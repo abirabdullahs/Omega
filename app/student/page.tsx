@@ -93,15 +93,18 @@ export default function StudentDashboard() {
     <div className="space-y-10 pb-20">
       {/* Running Chapters Section */}
       <section className="space-y-4">
-        <div className="flex items-center space-x-2">
-          <Zap className="text-amber-500 fill-amber-500 w-5 h-5" />
-          <h2 className="text-xl font-bold text-neutral-900">Current Assignments</h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="text-amber-500 fill-amber-500 w-5 h-5" />
+            <h2 className="text-xl font-bold text-neutral-900">Current Assignments</h2>
+          </div>
+          <p className="text-sm text-neutral-500">Track your current focus and due chapters.</p>
         </div>
-        
+
         {runningAssignment ? (
-          <div className="bg-neutral-900 text-white rounded-3xl p-8 shadow-xl relative overflow-hidden">
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-8">
+          <div className="bg-neutral-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+            <div className="relative z-10 space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-2">
                 <div>
                   <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest mb-1">Your Running Goal</p>
                   <h3 className="text-2xl font-bold">This Week&apos;s Focus</h3>
@@ -123,11 +126,10 @@ export default function StudentDashboard() {
                 ))}
               </div>
             </div>
-            {/* Decorative background circle */}
             <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl"></div>
           </div>
         ) : (
-          <div className="bg-white p-10 rounded-3xl border border-dashed border-neutral-200 text-center space-y-3">
+          <div className="bg-white p-6 sm:p-10 rounded-3xl border border-dashed border-neutral-200 text-center space-y-3">
             <p className="text-neutral-500 font-medium">No running chapters assigned.</p>
             <Link href="/student/plan" className="inline-block text-sm font-bold text-neutral-900 underline">
               Request new chapters →
@@ -138,9 +140,12 @@ export default function StudentDashboard() {
 
       {/* Tasks Section */}
       <section className="space-y-4">
-        <div className="flex items-center space-x-2">
-          <BookOpen className="text-blue-500 w-5 h-5" />
-          <h2 className="text-xl font-bold text-neutral-900">Module Tasks</h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="text-blue-500 w-5 h-5" />
+            <h2 className="text-xl font-bold text-neutral-900">Module Tasks</h2>
+          </div>
+          <span className="text-sm text-neutral-500">Tap a task for details and submission status.</span>
         </div>
         <div className="grid grid-cols-1 gap-3">
           {tasks.slice(0, 5).map((task) => {
@@ -150,15 +155,15 @@ export default function StudentDashboard() {
               <Link 
                 key={task.id} 
                 href={`/student/tasks/${task.id}`}
-                className="bg-white p-4 rounded-2xl border border-neutral-100 hover:border-neutral-200 transition-all flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-neutral-100 hover:border-neutral-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between group"
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 mb-3 sm:mb-0">
                   <div className={`p-2 rounded-lg ${isDone ? "bg-emerald-50 text-emerald-600" : "bg-neutral-50 text-neutral-400"}`}>
                     {isDone ? <CheckCircle2 size={20} /> : <BookOpen size={20} />}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-neutral-900">{task.title}</h3>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       {isDone && submission.grade && (
                         <span className="text-[10px] font-bold text-blue-600">Grade: {submission.grade}</span>
                       )}
@@ -176,7 +181,7 @@ export default function StudentDashboard() {
             );
           })}
           {tasks.length > 5 && (
-            <button className="text-xs font-bold text-neutral-400 py-2 hover:text-neutral-900 transition-colors">
+            <button className="text-xs font-bold text-neutral-400 py-2 hover:text-neutral-900 transition-colors text-left">
               View all tasks
             </button>
           )}
@@ -186,14 +191,14 @@ export default function StudentDashboard() {
       {/* History Section */}
       {pastAssignments.length > 0 && (
         <section className="space-y-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <History className="text-neutral-400 w-5 h-5" />
             <h2 className="text-xl font-bold text-neutral-900">Completed Chapters</h2>
           </div>
           <div className="space-y-3">
             {pastAssignments.map((pa) => (
               <div key={pa.id} className="bg-white p-4 rounded-2xl border border-neutral-100 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-3">
                   <p className="text-xs font-bold text-neutral-500">Cycle ended {pa.deadline?.toDate().toLocaleDateString()}</p>
                   <span className="text-[10px] font-bold bg-neutral-100 text-neutral-400 px-2 py-0.5 rounded-md uppercase">Archive</span>
                 </div>

@@ -35,30 +35,19 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-neutral-50">
       {/* Top Navbar */}
-      <nav className="bg-white border-b border-neutral-200 h-16 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between">
-          <div className="flex items-center space-x-8">
+      <nav className="bg-white border-b border-neutral-200 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 md:py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center font-bold text-neutral-900">
               <Layout className="w-5 h-5 mr-2 text-amber-500" />
               Omega Student
             </div>
-            <div className="hidden md:flex space-x-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    pathname === item.href 
-                      ? "bg-neutral-900 text-white" 
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  {item.name}
-                </Link>
-              ))}
+            <div className="text-sm text-neutral-500">
+              Welcome back, {userData?.name || user?.displayName || 'student'}.
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+
+          <div className="flex items-center gap-3">
             <span className="text-xs font-medium text-neutral-500 bg-neutral-100 px-2 py-1 rounded-md">
               {userData.phone}
             </span>
@@ -68,6 +57,27 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             >
               <LogOut size={20} />
             </button>
+          </div>
+        </div>
+
+        <div className="border-t border-neutral-200 bg-white md:hidden">
+          <div className="max-w-5xl mx-auto px-4 py-3 overflow-x-auto">
+            <div className="flex gap-2 whitespace-nowrap">
+              {navItems.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`inline-flex items-center px-3 py-2 rounded-2xl text-sm font-medium transition-colors ${
+                    pathname === item.href 
+                      ? "bg-neutral-900 text-white" 
+                      : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 mr-2" />
+                  {item.name}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </nav>
