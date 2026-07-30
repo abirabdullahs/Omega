@@ -33,10 +33,15 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      const email = formatPhoneToEmail(phone);
+      const loginValue = phone.trim();
+      const email = loginValue.includes("@")
+        ? loginValue.toLowerCase()
+        : formatPhoneToEmail(loginValue);
+
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      setError("Invalid phone number or password");
+      console.error("Firebase login error:", err);
+      setError(err?.message || "Invalid phone number or password");
     }
   };
 
