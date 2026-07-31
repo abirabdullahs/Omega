@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
     if (!db) return NextResponse.json({ error: "Firebase Admin not configured", details: getAdminInitError() }, { status: 500 });
 
     const snap = await db.collection("users").get();
-    const docs = snap.docs.map((d: any) => ({ id: d.id, data: d.data() }));
-    const toUpdate = docs.filter(d => !d.data.role || !d.data.createdAt).map(d => ({ id: d.id, roleMissing: !d.data.role, createdAtMissing: !d.data.createdAt }));
+    type UserDoc = { id: string; data: any };
+    const docs: UserDoc[] = snap.docs.map((d: any) => ({ id: d.id, data: d.data() } as UserDoc));
+    const toUpdate = docs.filter((d: UserDoc) => !d.data.role || !d.data.createdAt).map((d: UserDoc) => ({ id: d.id, roleMissing: !d.data.role, createdAtMissing: !d.data.createdAt }));
     return NextResponse.json({ total: docs.length, toUpdate, count: toUpdate.length });
   } catch (err: any) {
     console.error("Backfill preview error:", err);
@@ -39,8 +40,9 @@ export async function POST(req: NextRequest) {
     const batchSize = Number(body.batchSize) || 500;
 
     const snap = await db.collection("users").get();
-    const docs = snap.docs.map((d: any) => ({ id: d.id, data: d.data() }));
-    const toUpdate = docs.filter(d => !d.data.role || !d.data.createdAt);
+    type UserDoc = { id: string; data: any };
+    const docs: UserDoc[] = snap.docs.map((d: any) => ({ id: d.id, data: d.data() } as UserDoc));
+    const toUpdate = docs.filter((d: UserDoc) => !d.data.role || !d.data.createdAt);
 
     let updated = 0;
     // Process in sequential batches to avoid long transactions
