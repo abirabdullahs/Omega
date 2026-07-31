@@ -5,8 +5,8 @@ import { collection, getDocs, query, orderBy, doc, getDoc, where } from "firebas
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
-import { BookOpen, CheckCircle2, Circle, Clock, ChevronRight, Zap, History } from "lucide-react";
-import { SUBJECTS } from "@/lib/subjects";
+import { BookOpen, CheckCircle2, Clock, ChevronRight, Zap, History } from "lucide-react";
+import { getChapterName } from "@/lib/subjects";
 import { formatDate } from "@/lib/utils";
 
 interface Task {
@@ -22,12 +22,37 @@ interface Submission {
   submittedAt: any;
 }
 
+interface AssignmentItem {
+  chapterId: string;
+  subjectId?: string;
+  subjectName?: string;
+  deadline: any;
+}
+
 interface Assignment {
   id: string;
-  chapters: Record<string, string>;
+  chapters?: Record<string, string> | AssignmentItem[];
+  items?: AssignmentItem[];
   deadline: any;
   status: "running" | "completed";
   createdAt: any;
+}
+
+function getAssignmentItems(assignment: Assignment): AssignmentItem[] {
+  if (Array.isArray(assignment.items) && assignment.items.length > 0) {
+    return assignment.items;
+  }
+  if (Array.isArray(assignment.chapters)) {
+    return assignment.chapters as AssignmentItem[];
+  }
+  if (assignment.chapters && typeof assignment.chapters === "object") {
+    return Object.entries(assignment.chapters).map(([subjectId, chapterId]) => ({
+      subjectId,
+      chapterId,
+      deadline: assignment.deadline,
+    }));
+  }
+  return [];
 }
 
 export default function StudentDashboard() {
@@ -81,14 +106,7 @@ export default function StudentDashboard() {
 
   const runningAssignment = assignments.find(a => a.status === "running");
   const pastAssignments = assignments.filter(a => a.status === "completed");
-
-  const getChapterName = (id: string) => {
-    for (const sub of SUBJECTS) {
-      const chapter = sub.chapters.find(c => c.id === id);
-      if (chapter) return chapter.name;
-    }
-    return id;
-  };
+  const runningItems = runningAssignment ? getAssignmentItems(runningAssignment) : [];
 
   if (loading) return (
     <div className="py-20 text-center text-neutral-400">Loading your dashboard...</div>
@@ -106,7 +124,7 @@ export default function StudentDashboard() {
           <p className="text-sm text-neutral-500">Track your current focus and due chapters.</p>
         </div>
 
-        {runningAssignment ? (
+        {runningAssignment && runningItems.length > 0 ? (
           <div className="bg-neutral-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-2">
@@ -114,19 +132,19 @@ export default function StudentDashboard() {
                   <p className="text-neutral-400 text-xs font-bold uppercase tracking-widest mb-1">Your Running Goal</p>
                   <h3 className="text-2xl font-bold">This Week&apos;s Focus</h3>
                 </div>
-                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-right">
-                  <p className="text-[10px] text-neutral-400 font-bold uppercase">Deadline</p>
-                  <p className="text-sm font-bold text-amber-400">
-                    {formatDate(runningAssignment.deadline, { day: 'numeric', month: 'short' })}
-                  </p>
-                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {Object.entries(runningAssignment.chapters).map(([subjectId, chapterId]) => (
-                  <div key={subjectId} className="bg-white/5 border border-white/5 p-4 rounded-2xl">
-                    <p className="text-[10px] text-neutral-500 font-bold uppercase mb-1">{subjectId}</p>
-                    <p className="text-sm font-medium">{getChapterName(chapterId)}</p>
+                {runningItems.map((item) => (
+                  <div key={item.chapterId} className="bg-white/5 border border-white/5 p-4 rounded-2xl">
+                    <p className="text-[10px] text-neutral-500 font-bold uppercase mb-1">
+                      {item.subjectName || item.subjectId || "Subject"}
+                    </p>
+                    <p className="text-sm font-medium">{getChapterName(item.chapterId)}</p>
+                    <p className="text-[10px] font-bold text-amber-400 mt-2 flex items-center">
+                      <Clock size={10} className="mr-1" />
+                      Due {formatDate(item.deadline, { day: "numeric", month: "short" }) || "—"}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -212,9 +230,10 @@ export default function StudentDashboard() {
                   <span className="text-[10px] font-bold bg-neutral-100 text-neutral-400 px-2 py-0.5 rounded-md uppercase">Archive</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {Object.values(pa.chapters).map((cid) => (
-                    <span key={cid} className="text-[10px] font-medium bg-neutral-50 text-neutral-600 px-2 py-1 rounded-lg border border-neutral-100">
-                      {getChapterName(cid)}
+                  {getAssignmentItems(pa).map((item) => (
+                    <span key={item.chapterId} className="text-[10px] font-medium bg-neutral-50 text-neutral-600 px-2 py-1 rounded-lg border border-neutral-100">
+                      {getChapterName(item.chapterId)}
+                      {item.deadline ? ` · ${formatDate(item.deadline)}` : ""}
                     </span>
                   ))}
                 </div>

@@ -8,3 +8,4 @@ coverage/
 omega-90935-firebase-adminsdk-fbsvc-c1f8995154.json
 .env.local
 .vercel
+.env*.local

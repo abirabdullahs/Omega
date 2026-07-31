@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, limit } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, limit, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import { SUBJECTS } from "@/lib/subjects";
@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/utils";
 export default function CoursePlanPage() {
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [lastRequest, setLastRequest] = useState<any>(null);
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [expandedSubject, setExpandedSubject] = useState<string | null>(SUBJECTS[0].id);
@@ -25,11 +26,14 @@ export default function CoursePlanPage() {
     );
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const data = snap.docs[0].data();
-      setLastRequest(data);
+      const docSnap = snap.docs[0];
+      const data = docSnap.data();
+      setLastRequest({ id: docSnap.id, ...data });
+      setLastRequestId(docSnap.id);
       setSelectedChapters(data.requestedChapters || []);
     } else {
       setLastRequest(null);
+      setLastRequestId(null);
     }
   };
 
@@ -62,16 +66,29 @@ export default function CoursePlanPage() {
     if (!user || selectedChapters.length === 0) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, "requests"), {
+      const payload = {
         userId: user.uid,
         userName: userData?.name || user.email?.split("@")[0],
         requestedChapters: selectedChapters,
-        createdAt: serverTimestamp(),
         status: "pending",
-        userPhone: userData?.phone || user.email?.split("@")[0]
-      });
+        userPhone: userData?.phone || user.email?.split("@")[0],
+      };
+
+      // Edit existing pending request instead of stacking duplicates
+      if (lastRequestId && lastRequest?.status === "pending") {
+        await updateDoc(doc(db, "requests", lastRequestId), {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+        alert("Request updated successfully!");
+      } else {
+        await addDoc(collection(db, "requests"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        alert("Request sent successfully!");
+      }
       await fetchLastRequest(user.uid);
-      alert("Request sent successfully!");
     } catch (err) {
       console.error(err);
       alert("Failed to send request.");
@@ -82,11 +99,15 @@ export default function CoursePlanPage() {
 
   if (loading) return <div className="py-20 text-center text-neutral-400">Loading curriculum...</div>;
 
+  const isEditingPending = lastRequest?.status === "pending";
+
   return (
     <div className="space-y-8 pb-20">
       <div>
         <h2 className="text-2xl font-bold text-neutral-900">Course Planning</h2>
-        <p className="text-neutral-500 text-sm">Select the chapters you want to study next and send a request to your mentor.</p>
+        <p className="text-neutral-500 text-sm">
+          Select the chapters you want to study next and send a request to your mentor. You can edit a pending request anytime.
+        </p>
       </div>
 
       {lastRequest && (
@@ -94,7 +115,12 @@ export default function CoursePlanPage() {
           <Info className="w-5 h-5 text-amber-600 mt-0.5" />
           <div className="text-sm text-amber-800">
             <p className="font-bold">Last request status: {lastRequest.status.toUpperCase()}</p>
-            <p>Submitted on {formatDate(lastRequest.createdAt)}. You can update your selection and send a new request if needed.</p>
+            <p>
+              Submitted on {formatDate(lastRequest.createdAt)}.
+              {isEditingPending
+                ? " Change your selection below and save to update this pending request."
+                : " You can select chapters again and send a new request."}
+            </p>
           </div>
         </div>
       )}
@@ -154,7 +180,11 @@ export default function CoursePlanPage() {
           {submitting ? "Processing..." : (
             <>
               <Send size={18} />
-              <span>Send Request ({selectedChapters.length} Chapters)</span>
+              <span>
+                {isEditingPending
+                  ? `Update Request (${selectedChapters.length} Chapters)`
+                  : `Send Request (${selectedChapters.length} Chapters)`}
+              </span>
             </>
           )}
         </button>

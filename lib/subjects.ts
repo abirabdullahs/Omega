@@ -109,3 +109,15 @@ export const SUBJECTS: Subject[] = [
     ],
   },
 ];
+
+export function findChapterMeta(chapterId: string): { subject: Subject; chapter: Chapter } | null {
+  for (const subject of SUBJECTS) {
+    const chapter = subject.chapters.find((c) => c.id === chapterId);
+    if (chapter) return { subject, chapter };
+  }
+  return null;
+}
+
+export function getChapterName(chapterId: string): string {
+  return findChapterMeta(chapterId)?.chapter.name || chapterId;
+}

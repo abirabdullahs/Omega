@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, query, orderBy, doc, updateDoc, addDoc, serverTimestamp, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { SUBJECTS } from "@/lib/subjects";
+import { findChapterMeta, getChapterName } from "@/lib/subjects";
 import { formatDate, parseDateInputLocal } from "@/lib/utils";
-import { CheckCircle2, Clock, User, Calendar, Send, Info, X } from "lucide-react";
+import { User, Calendar, Send, Info, X } from "lucide-react";
 
 interface Request {
   id: string;
@@ -21,8 +21,7 @@ export default function AdminRequestsPage() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
-  const [assignment, setAssignment] = useState<Record<string, string>>({});
-  const [deadline, setDeadline] = useState("");
+  const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [isAssigning, setIsAssigning] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -33,7 +32,7 @@ export default function AdminRequestsPage() {
         const q = query(collection(db, "requests"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
         const snap = await getDocs(q);
         if (isMounted) {
-          setRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Request)));
+          setRequests(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Request)));
         }
       } catch (err) {
         console.error(err);
@@ -47,29 +46,33 @@ export default function AdminRequestsPage() {
 
   const handleSelectRequest = (req: Request) => {
     setSelectedRequest(req);
-    // Initialize assignment with empty values for each subject
     const initial: Record<string, string> = {};
-    SUBJECTS.forEach(s => initial[s.id] = "");
-    setAssignment(initial);
-    setDeadline("");
+    (req.requestedChapters || []).forEach((chapterId) => {
+      initial[chapterId] = "";
+    });
+    setDeadlines(initial);
   };
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRequest || !deadline) return;
+    if (!selectedRequest) return;
 
-    // Validate that one chapter per subject is selected
-    const allSelected = Object.values(assignment).every(v => v !== "");
-    if (!allSelected) {
-      alert("Please select one chapter for each subject.");
+    const chapterIds = selectedRequest.requestedChapters || [];
+    if (chapterIds.length === 0) {
+      alert("This request has no chapters to assign.");
+      return;
+    }
+
+    const missing = chapterIds.filter((id) => !deadlines[id]);
+    if (missing.length > 0) {
+      alert("Please set a deadline for every requested chapter.");
       return;
     }
 
     setIsAssigning(true);
     try {
-      // 1. Mark existing running assignments for this user as completed
       const oldSnap = await getDocs(query(
-        collection(db, "assignments"), 
+        collection(db, "assignments"),
         where("userId", "==", selectedRequest.userId),
         where("status", "==", "running")
       ));
@@ -77,17 +80,31 @@ export default function AdminRequestsPage() {
         await updateDoc(doc(db, "assignments", d.id), { status: "completed" });
       }
 
-      // 2. Create new assignment
-      const deadlineDate = parseDateInputLocal(deadline);
+      const items = chapterIds.map((chapterId) => {
+        const meta = findChapterMeta(chapterId);
+        return {
+          chapterId,
+          subjectId: meta?.subject.id || "unknown",
+          subjectName: meta?.subject.name || "Unknown",
+          deadline: Timestamp.fromDate(parseDateInputLocal(deadlines[chapterId])),
+        };
+      });
+
+      const latestDeadline = items.reduce((latest, item) => {
+        const t = item.deadline.toMillis();
+        return t > latest ? t : latest;
+      }, 0);
+
       await addDoc(collection(db, "assignments"), {
         userId: selectedRequest.userId,
-        chapters: assignment,
-        deadline: Timestamp.fromDate(deadlineDate),
+        items,
+        // Legacy-compatible map (subjectId -> chapterId) for older readers
+        chapters: Object.fromEntries(items.map((item) => [item.subjectId, item.chapterId])),
+        deadline: Timestamp.fromMillis(latestDeadline),
         status: "running",
         createdAt: serverTimestamp(),
       });
 
-      // 3. Update request status
       await updateDoc(doc(db, "requests", selectedRequest.id), { status: "approved" });
 
       setSelectedRequest(null);
@@ -101,23 +118,14 @@ export default function AdminRequestsPage() {
     }
   };
 
-  const getChapterName = (id: string) => {
-    for (const sub of SUBJECTS) {
-      const chapter = sub.chapters.find(c => c.id === id);
-      if (chapter) return chapter.name;
-    }
-    return id;
-  };
-
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold text-neutral-900">Student Requests</h2>
-        <p className="text-neutral-500 text-sm">Review chapter requests and assign weekly study goals.</p>
+        <p className="text-neutral-500 text-sm">Review chapter requests and set a deadline for each selected chapter.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* List */}
         <div className="space-y-4">
           {loading ? (
             <div className="py-20 text-center text-neutral-400">Loading requests...</div>
@@ -161,14 +169,15 @@ export default function AdminRequestsPage() {
           ))}
         </div>
 
-        {/* Assignment Tool */}
         <div>
           {selectedRequest ? (
             <div className="bg-white p-8 rounded-3xl border border-neutral-100 shadow-xl sticky top-8">
               <div className="flex justify-between items-start mb-8">
                 <div>
                   <h3 className="text-xl font-bold text-neutral-900">Assign Chapters</h3>
-                  <p className="text-sm text-neutral-500">For student {selectedRequest.userPhone}</p>
+                  <p className="text-sm text-neutral-500">
+                    Only chapters requested by {selectedRequest.userName || selectedRequest.userPhone}
+                  </p>
                 </div>
                 <button onClick={() => setSelectedRequest(null)} className="text-neutral-400 hover:text-neutral-900">
                   <X size={20} />
@@ -177,43 +186,45 @@ export default function AdminRequestsPage() {
 
               <form onSubmit={handleAssign} className="space-y-6">
                 <div className="space-y-4">
-                  {SUBJECTS.map((subject) => (
-                    <div key={subject.id}>
-                      <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">{subject.name}</label>
-                      <select
-                        required
-                        value={assignment[subject.id]}
-                        onChange={(e) => setAssignment({...assignment, [subject.id]: e.target.value})}
-                        className="w-full bg-neutral-50 px-4 py-3 border border-neutral-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-neutral-900 transition-all"
-                      >
-                        <option value="">Select Chapter</option>
-                        {subject.chapters.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} (Paper {c.paper})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-4 border-t border-neutral-50">
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Set Deadline</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
-                    <input
-                      type="date"
-                      required
-                      value={deadline}
-                      onChange={(e) => setDeadline(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-neutral-900"
-                    />
-                  </div>
+                  {(selectedRequest.requestedChapters || []).length === 0 ? (
+                    <p className="text-sm text-neutral-400">No chapters in this request.</p>
+                  ) : (
+                    (selectedRequest.requestedChapters || []).map((chapterId) => {
+                      const meta = findChapterMeta(chapterId);
+                      return (
+                        <div key={chapterId} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-3">
+                          <div>
+                            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
+                              {meta?.subject.name || "Subject"}
+                            </p>
+                            <p className="text-sm font-bold text-neutral-900 mt-1">
+                              {meta?.chapter.name || chapterId}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">
+                              Deadline
+                            </label>
+                            <div className="relative">
+                              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
+                              <input
+                                type="date"
+                                required
+                                value={deadlines[chapterId] || ""}
+                                onChange={(e) => setDeadlines({ ...deadlines, [chapterId]: e.target.value })}
+                                className="w-full pl-12 pr-4 py-3 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-neutral-900 bg-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isAssigning}
+                  disabled={isAssigning || !(selectedRequest.requestedChapters || []).length}
                   className="w-full bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center"
                 >
                   {isAssigning ? "Assigning..." : "Assign & Notify Student"}
