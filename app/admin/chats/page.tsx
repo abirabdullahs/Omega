@@ -15,6 +15,7 @@ export default function AdminChatDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [search, setSearch] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const { user, userData } = useAuth();
   useEffect(() => {
     const fetchStudents = async () => {
@@ -53,20 +54,29 @@ export default function AdminChatDashboard() {
 
       <div className="flex-1 flex gap-8 min-h-0">
         {/* Sidebar: Student List */}
-        <div className="w-96 flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+        <div className={`flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all ${sidebarOpen ? 'w-96' : 'w-14'}`}>
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/30">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="Search students..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-neutral-100 rounded-xl text-xs focus:ring-2 focus:ring-neutral-900 transition-all outline-none"
-              />
+            <div className="relative flex items-center">
+              <button onClick={() => setSidebarOpen(open => !open)} className="p-2 rounded-md hover:bg-neutral-100">
+                <svg className="w-5 h-5 text-neutral-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" /></svg>
+              </button>
+              {sidebarOpen && (
+                <div className="flex-1 ml-2">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                    <input
+                      type="text"
+                      placeholder="Search students..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-white border border-neutral-100 rounded-xl text-xs focus:ring-2 focus:ring-neutral-900 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-neutral-50">
+          <div className={`flex-1 overflow-y-auto divide-y divide-neutral-50 ${sidebarOpen ? '' : 'hidden'}`}>
             {filteredStudents.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-400">No students found.</div>
             ) : (
@@ -92,7 +102,7 @@ export default function AdminChatDashboard() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 min-h-0">
+        <div className={`flex-1 min-h-0 ${sidebarOpen ? '' : 'pl-2'}`}>
           {selectedStudent ? (
             <div className="h-full flex flex-col">
               <div className="flex-1">

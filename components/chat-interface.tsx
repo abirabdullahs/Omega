@@ -35,12 +35,9 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
 
     const fetchMessages = async () => {
       if (!db) return;
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-      const q = query(
-        collection(db, "chats", roomId, "messages"),
-        where("createdAt", ">=", tenMinutesAgo),
-        orderBy("createdAt", "asc")
-      );
+      // Load recent messages (no 10-minute cut-off). Limit to 1000 to avoid huge loads.
+      const messagesRef = collection(db, "chats", roomId, "messages");
+      const q = query(messagesRef, orderBy("createdAt", "asc"));
 
       try {
         const snap = await getDocs(q);
@@ -54,12 +51,11 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
 
     fetchMessages();
 
-    // Use Firestore realtime listener for messages instead of Socket.IO
+    // Use Firestore realtime listener for messages
     let unsubscribe: (() => void) | null = null;
     try {
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const messagesRef = collection(db, "chats", roomId, "messages");
-      const q = query(messagesRef, where("createdAt", ">=", tenMinutesAgo), orderBy("createdAt", "asc"));
+      const q = query(messagesRef, orderBy("createdAt", "asc"));
       unsubscribe = onSnapshot(q, (snap) => {
         if (cancelled) return;
         const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
@@ -112,6 +108,29 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
     }
   };
 
+  const handleCompleteSession = async () => {
+    if (!confirm("Complete this session? This will permanently delete all messages for this chat.")) return;
+    try {
+      const uid = auth?.currentUser?.uid;
+      if (!uid) throw new Error("Not authenticated");
+      const token = await auth.currentUser?.getIdToken();
+      const url = `/api/admin/chats?roomId=${encodeURIComponent(roomId)}`;
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Failed to complete session (${res.status})`);
+      }
+      // Clear local messages
+      setMessages([]);
+    } catch (err: any) {
+      console.error("Failed to complete session:", err?.message || err);
+      setSendError(err?.message || String(err));
+    }
+  };
+
   return (
     <div className="flex flex-col h-[500px] bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
       <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex items-center justify-between">
@@ -121,11 +140,20 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
           </div>
           <div>
             <p className="text-xs font-bold text-neutral-900">Live Support</p>
-            <p className="text-[10px] text-amber-500 font-medium flex items-center">
-              <Clock size={10} className="mr-1" /> Messages disappear after 10m
-            </p>
+            <p className="text-[10px] text-neutral-500 font-medium">Messenger</p>
           </div>
         </div>
+        {/* Admin controls */}
+        {currentUser.role === 'admin' && (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleCompleteSession}
+              className="text-xs px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+            >
+              Complete this session
+            </button>
+          </div>
+        )}
       </div>
 
       <div 
