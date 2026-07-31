@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, db } from "@/lib/firebase-admin";
+import { auth, db, adminInitError } from "@/lib/firebase-admin";
 import { formatPhoneToEmail, getDefaultPassword } from "@/lib/auth-utils";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!auth || !db) {
+      return NextResponse.json(
+        {
+          error: "Firebase Admin setup is incomplete.",
+          details: adminInitError || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
+        },
+        { status: 500 }
+      );
+    }
+
     const { students } = await req.json();
     
     if (!students || !Array.isArray(students)) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Users, BookOpen, MessageSquare, Bell } from "lucide-react";
@@ -59,11 +60,20 @@ export default function AdminDashboard() {
 
       <div className="bg-white rounded-2xl border border-neutral-100 p-8">
         <h3 className="text-lg font-semibold mb-4 text-neutral-900">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {["Add Student", "New Task", "Post Notice", "Grade Submissions"].map((action) => (
-            <button key={action} className="p-4 border border-neutral-100 rounded-xl hover:bg-neutral-50 transition-colors text-sm font-medium text-neutral-700">
-              {action}
-            </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[
+            { label: "Add Student", href: "/admin/students" },
+            { label: "New Task", href: "/admin/tasks" },
+            { label: "Post Notice", href: "/admin/notices" },
+            { label: "Grade Submissions", href: "/admin/submissions" },
+          ].map((action) => (
+            <Link
+              key={action.label}
+              href={action.href}
+              className="p-4 border border-neutral-100 rounded-xl hover:bg-neutral-50 transition-colors text-sm font-medium text-neutral-700"
+            >
+              {action.label}
+            </Link>
           ))}
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { EmailAuthProvider, reauthenticateWithCredential, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
@@ -58,15 +58,29 @@ export default function LoginPage() {
     }
 
     try {
-      if (auth.currentUser) {
-        await updatePassword(auth.currentUser, newPassword);
-        await updateDoc(doc(db, "users", auth.currentUser.uid), {
-          passwordChanged: true
-        });
-        // Success will trigger the useEffect to redirect
+      if (!auth.currentUser) {
+        setError("Your session has expired. Please sign in again.");
+        return;
       }
+
+      if (!password.trim()) {
+        setError("Please enter your current password to continue.");
+        return;
+      }
+
+      const loginEmail = auth.currentUser.email || (phone.trim().includes("@") ? phone.trim().toLowerCase() : formatPhoneToEmail(phone.trim()));
+      const credential = EmailAuthProvider.credential(loginEmail, password);
+
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword);
+      await updateDoc(doc(db, "users", auth.currentUser.uid), {
+        passwordChanged: true
+      });
     } catch (err: any) {
-      setError(err.message);
+      const message = err?.code === "auth/requires-recent-login"
+        ? "Please sign in again and try the password update once more."
+        : err?.message || "Could not update password";
+      setError(message);
     }
   };
 
