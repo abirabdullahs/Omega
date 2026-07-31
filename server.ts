@@ -3,7 +3,7 @@ import { parse } from "url";
 import next from "next";
 import { Server } from "socket.io";
 import express from "express";
-import { db } from "./lib/firebase-admin.ts";
+import { db, adminInitError } from "./lib/firebase-admin.ts";
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
@@ -29,7 +29,7 @@ app.prepare().then(() => {
 
     socket.on("send_message", async (data) => {
       const { roomId, senderId, senderName, text, role } = data;
-      
+
       const messageData = {
         senderId,
         senderName,
@@ -38,10 +38,16 @@ app.prepare().then(() => {
         createdAt: new Date(),
       };
 
+      if (!db) {
+        console.warn("Firestore Admin SDK unavailable; broadcasting message without persistence.", adminInitError);
+        io.to(roomId).emit("receive_message", messageData);
+        return;
+      }
+
       try {
         // Persist to Firestore for the 10-minute window
         await db.collection("chats").doc(roomId).collection("messages").add(messageData);
-        
+
         // Broadcast to the room
         io.to(roomId).emit("receive_message", messageData);
       } catch (error) {
@@ -54,31 +60,35 @@ app.prepare().then(() => {
     });
   });
 
-  // Background Cleanup Job: Every 1 minute, delete messages older than 10 minutes
-  setInterval(async () => {
-    try {
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-      const chatsSnapshot = await db.collection("chats").get();
-      
-      for (const chatDoc of chatsSnapshot.docs) {
-        const messagesRef = chatDoc.ref.collection("messages");
-        const oldMessagesSnapshot = await messagesRef
-          .where("createdAt", "<", tenMinutesAgo)
-          .get();
+  if (!db) {
+    console.warn("Firestore Admin SDK unavailable; cleanup job disabled.", adminInitError);
+  } else {
+    // Background Cleanup Job: Every 1 minute, delete messages older than 10 minutes
+    setInterval(async () => {
+      try {
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const chatsSnapshot = await db.collection("chats").get();
 
-        if (!oldMessagesSnapshot.empty) {
-          const batch = db.batch();
-          oldMessagesSnapshot.docs.forEach((doc: any) => {
-            batch.delete(doc.ref);
-          });
-          await batch.commit();
-          console.log(`Deleted ${oldMessagesSnapshot.size} old messages from chat ${chatDoc.id}`);
+        for (const chatDoc of chatsSnapshot.docs) {
+          const messagesRef = chatDoc.ref.collection("messages");
+          const oldMessagesSnapshot = await messagesRef
+            .where("createdAt", "<", tenMinutesAgo)
+            .get();
+
+          if (!oldMessagesSnapshot.empty) {
+            const batch = db.batch();
+            oldMessagesSnapshot.docs.forEach((doc: any) => {
+              batch.delete(doc.ref);
+            });
+            await batch.commit();
+            console.log(`Deleted ${oldMessagesSnapshot.size} old messages from chat ${chatDoc.id}`);
+          }
         }
+      } catch (error) {
+        console.error("Cleanup error:", error);
       }
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
-  }, 60 * 1000);
+    }, 60 * 1000);
+  }
 
   // Next.js handler
   expressApp.all(/.*/, (req, res) => {
