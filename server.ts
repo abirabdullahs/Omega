@@ -3,7 +3,7 @@ import { parse } from "url";
 import next from "next";
 import { Server } from "socket.io";
 import express from "express";
-import { auth, db, adminInitError } from "./lib/firebase-admin.ts";
+import { getAdminAuth, getAdminDb, getAdminInitError } from "./lib/firebase-admin.ts";
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
@@ -18,6 +18,10 @@ app.prepare().then(() => {
       origin: appOrigin,
     },
   });
+
+  const auth = getAdminAuth();
+  const db = getAdminDb();
+  const adminInitError = getAdminInitError();
 
   io.use(async (socket, next) => {
     try {

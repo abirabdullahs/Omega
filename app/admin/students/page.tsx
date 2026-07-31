@@ -33,6 +33,16 @@ export default function StudentsPage() {
     };
   };
 
+  const parseJsonResponse = async (res: Response) => {
+    const text = await res.text();
+    if (!text) return { ok: res.ok, status: res.status, statusText: res.statusText };
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: res.ok, status: res.status, statusText: res.statusText, error: text, _raw: text };
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     async function fetchStudents() {
@@ -45,17 +55,18 @@ export default function StudentsPage() {
         const res = await fetch("/api/admin/students", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         if (isMounted) {
           if (res.ok && Array.isArray(data)) {
             setStudents(data);
           } else {
             setStudents([]);
-            if (data.error) setError(data.error);
+            setError(data.error || data.details || data._raw || `Unable to load students (${res.status})`);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        if (isMounted) setError(`Unable to load students: ${err.message || err}`);
       } finally {
         if (isMounted) setLoading(false);
       }

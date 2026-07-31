@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, db, adminInitError } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 import { formatPhoneToEmail, getDefaultPassword } from "@/lib/auth-utils";
 import { verifyAdminRequest } from "@/lib/api-auth";
 
-export async function POST(req: NextRequest) {
-  const adminCheck = await verifyAdminRequest(req);
-  if (!adminCheck.ok) return adminCheck.response;
+export const runtime = "nodejs";
 
+export async function POST(req: NextRequest) {
   try {
+    const adminCheck = await verifyAdminRequest(req);
+    if (!adminCheck.ok) return adminCheck.response;
+
+    const auth = getAdminAuth();
+    const db = getAdminDb();
+
     if (!auth || !db) {
       return NextResponse.json(
         {
           error: "Firebase Admin setup is incomplete.",
-          details: adminInitError || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
+          details: getAdminInitError() || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
         },
         { status: 500 }
       );
@@ -73,20 +78,24 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error("Error creating student:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Failed to create students" },
+      { status: 500 }
+    );
   }
 }
 
 export async function GET(req: NextRequest) {
-  const adminCheck = await verifyAdminRequest(req);
-  if (!adminCheck.ok) return adminCheck.response;
-
   try {
+    const adminCheck = await verifyAdminRequest(req);
+    if (!adminCheck.ok) return adminCheck.response;
+
+    const db = getAdminDb();
     if (!db) {
       return NextResponse.json(
         {
           error: "Firebase Admin setup is incomplete.",
-          details: adminInitError || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
+          details: getAdminInitError() || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
         },
         { status: 500 }
       );
@@ -95,20 +104,27 @@ export async function GET(req: NextRequest) {
     const students = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     return NextResponse.json(students);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error listing students:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to list students" },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const adminCheck = await verifyAdminRequest(req);
-  if (!adminCheck.ok) return adminCheck.response;
-
   try {
+    const adminCheck = await verifyAdminRequest(req);
+    if (!adminCheck.ok) return adminCheck.response;
+
+    const auth = getAdminAuth();
+    const db = getAdminDb();
+
     if (!auth || !db) {
       return NextResponse.json(
         {
           error: "Firebase Admin setup is incomplete.",
-          details: adminInitError || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
+          details: getAdminInitError() || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
         },
         { status: 500 }
       );
@@ -132,6 +148,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, message: "Student account deleted successfully" });
   } catch (error: any) {
     console.error("Error deleting student:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Failed to delete student" },
+      { status: 500 }
+    );
   }
 }

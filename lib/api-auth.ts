@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, db, adminInitError } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 
 export type AdminAuthResult =
   | { ok: true; uid: string; role: string }
   | { ok: false; response: NextResponse };
 
 export async function verifyAdminRequest(req: NextRequest): Promise<AdminAuthResult> {
+  const auth = getAdminAuth();
+  const db = getAdminDb();
+
   if (!auth || !db) {
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "Firebase Admin setup is incomplete.",
-          details: adminInitError || "Add FIREBASE_SERVICE_ACCOUNT_JSON in your deployment environment.",
+          details:
+            getAdminInitError() ||
+            "Add FIREBASE_SERVICE_ACCOUNT_JSON to the Vercel Production environment, then redeploy.",
         },
         { status: 500 }
       ),
@@ -47,10 +52,13 @@ export async function verifyAdminRequest(req: NextRequest): Promise<AdminAuthRes
     }
 
     return { ok: true, uid: decoded.uid, role };
-  } catch {
+  } catch (err: any) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Invalid or expired token" }, { status: 401 }),
+      response: NextResponse.json(
+        { error: "Invalid or expired token", details: err?.message },
+        { status: 401 }
+      ),
     };
   }
 }
