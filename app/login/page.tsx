@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const { user, userData, loading } = useAuth();
   const router = useRouter();
 
@@ -63,19 +64,23 @@ export default function LoginPage() {
         return;
       }
 
-      if (!password.trim()) {
+      const currentPasswordValue = currentPassword.trim() || password.trim();
+      if (!currentPasswordValue) {
         setError("Please enter your current password to continue.");
         return;
       }
 
       const loginEmail = auth.currentUser.email || (phone.trim().includes("@") ? phone.trim().toLowerCase() : formatPhoneToEmail(phone.trim()));
-      const credential = EmailAuthProvider.credential(loginEmail, password);
+      const credential = EmailAuthProvider.credential(loginEmail, currentPasswordValue);
 
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, newPassword);
       await updateDoc(doc(db, "users", auth.currentUser.uid), {
         passwordChanged: true
       });
+
+      const role = userData?.role || "student";
+      router.push(role === "admin" ? "/admin" : "/student");
     } catch (err: any) {
       const message = err?.code === "auth/requires-recent-login"
         ? "Please sign in again and try the password update once more."
@@ -116,6 +121,22 @@ export default function LoginPage() {
         {showPasswordChange ? (
           <form className="mt-8 space-y-6" onSubmit={handlePasswordChange}>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700">Current Password</label>
+                <div className="mt-1 relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-neutral-400">
+                    <Lock size={18} />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900"
+                    placeholder="Enter your current password"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-neutral-700">New Password</label>
                 <div className="mt-1 relative">

@@ -60,9 +60,25 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 bg-white md:hidden">
+        <div className="border-t border-neutral-200 bg-white">
           <div className="max-w-5xl mx-auto px-4 py-3 overflow-x-auto">
-            <div className="flex gap-2 whitespace-nowrap">
+            <div className="hidden md:flex gap-2 whitespace-nowrap">
+              {navItems.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`inline-flex items-center px-3 py-2 rounded-2xl text-sm font-medium transition-colors ${
+                    pathname === item.href 
+                      ? "bg-neutral-900 text-white" 
+                      : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 mr-2" />
+                  {item.name}
+                </Link>
+              ))}
+            </div>
+            <div className="flex gap-2 whitespace-nowrap md:hidden">
               {navItems.map((item) => (
                 <Link
                   key={item.name}

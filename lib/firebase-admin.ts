@@ -4,6 +4,54 @@ import { applicationDefault, cert, getApp, getApps, initializeApp } from "fireba
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+function getServiceAccountFromEnv() {
+  const candidates = [
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    process.env.FIREBASE_SERVICE_ACCOUNT,
+    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+  ];
+
+  for (const value of candidates) {
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+
+    try {
+      if (trimmed.startsWith("{")) {
+        return JSON.parse(trimmed);
+      }
+
+      const normalized = trimmed.replace(/\\n/g, "\n");
+      if (normalized.includes("-----BEGIN PRIVATE KEY-----")) {
+        return {
+          type: "service_account",
+          project_id: process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || "omega-90935",
+          private_key: normalized,
+          client_email: process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL,
+        };
+      }
+
+      return JSON.parse(normalized);
+    } catch {
+      continue;
+    }
+  }
+
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY;
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+
+  if (clientEmail && privateKey) {
+    return {
+      type: "service_account",
+      project_id: projectId || "omega-90935",
+      private_key: privateKey.replace(/\\n/g, "\n"),
+      client_email: clientEmail,
+    };
+  }
+
+  return null;
+}
+
 function getServiceAccountPath() {
   const explicitPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (explicitPath) {
@@ -32,18 +80,9 @@ function getServiceAccountPath() {
 }
 
 function getServiceAccount() {
-  const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-  if (envJson) {
-    try {
-      return JSON.parse(envJson);
-    } catch (error) {
-      try {
-        const normalized = envJson.replace(/\\n/g, "\n");
-        return JSON.parse(normalized);
-      } catch {
-        throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.");
-      }
-    }
+  const envServiceAccount = getServiceAccountFromEnv();
+  if (envServiceAccount) {
+    return envServiceAccount;
   }
 
   const serviceAccountPath = getServiceAccountPath();
@@ -72,7 +111,7 @@ try {
 } catch (error: any) {
   const message = error?.message || "Unknown Firebase Admin initialization error";
   adminInitError = message.includes("Could not load the default credentials")
-    ? `Firebase Admin SDK is not configured. Add a service account JSON via FIREBASE_SERVICE_ACCOUNT_JSON or set GOOGLE_APPLICATION_CREDENTIALS. Original error: ${message}`
+    ? `Firebase Admin SDK is not configured. Add a service account JSON via FIREBASE_SERVICE_ACCOUNT_JSON, or set FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY + FIREBASE_PROJECT_ID, or configure GOOGLE_APPLICATION_CREDENTIALS. Original error: ${message}`
     : message;
 }
 

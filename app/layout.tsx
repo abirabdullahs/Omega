@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   description: 'Premium mentorship platform by Abir Hossen Abdullah (abirabdullah.me). Manage students, tasks, and curriculum progress.',
   keywords: ['Omega', 'Abir Hossen Abdullah', 'abirabdullah.me', 'Mentorship', 'Learning Management'],
   authors: [{ name: 'Abir Hossen Abdullah', url: 'https://abirabdullah.me' }],
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
