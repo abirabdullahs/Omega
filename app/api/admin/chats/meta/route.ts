@@ -21,7 +21,16 @@ export async function GET(req: NextRequest) {
     }
 
     const snapshot = await db.collection("chats_meta").get();
-    const items = snapshot.docs
+    type ChatMetaItem = {
+      roomId: string;
+      lastMessageAt: number | null;
+      lastMessageText: string | null;
+      unreadForAdmin: boolean;
+      unreadForStudent: boolean;
+      updatedAt: number | null;
+    };
+
+    const items: ChatMetaItem[] = snapshot.docs
       .map((doc: any) => {
         const data: any = doc.data();
         return {
@@ -33,7 +42,7 @@ export async function GET(req: NextRequest) {
           updatedAt: data?.updatedAt?.toMillis ? data.updatedAt.toMillis() : data?.updatedAt || null,
         };
       })
-      .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+      .sort((a: ChatMetaItem, b: ChatMetaItem) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
 
     return NextResponse.json({ success: true, items });
   } catch (error: any) {

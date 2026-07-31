@@ -160,8 +160,8 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   };
 
   return (
-    <div className="flex flex-col h-[500px] bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
-      <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex items-center justify-between">
+    <div className="relative flex flex-col h-full max-h-[calc(100vh-14rem)] bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+      <div className="sticky top-0 z-20 p-4 border-b border-neutral-100 bg-white/95 backdrop-blur-sm flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-neutral-900 rounded-full flex items-center justify-center">
             <User size={16} className="text-white" />
@@ -186,7 +186,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
 
       <div 
         ref={scrollRef}
-        className="flex-1 p-4 overflow-y-auto space-y-4 bg-neutral-50/30 scroll-smooth"
+        className="flex-1 min-h-0 p-4 overflow-y-auto space-y-4 bg-neutral-50/30 scroll-smooth"
       >
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2 opacity-50">
@@ -214,7 +214,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
         ))}
       </div>
 
-      <div className="p-4 border-t border-neutral-100 bg-white">
+      <div className="sticky bottom-0 z-20 p-4 border-t border-neutral-100 bg-white/95 backdrop-blur-sm">
         <div className="relative">
           <input
             type="text"
@@ -222,7 +222,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type a message..."
-            className="w-full pl-4 pr-12 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl text-sm focus:ring-2 focus:ring-neutral-900 focus:bg-white transition-all outline-none"
+            className="w-full pr-12 pl-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl text-sm focus:ring-2 focus:ring-neutral-900 focus:bg-white transition-all outline-none"
           />
           <button
             onClick={handleSend}
