@@ -1,0 +1,16 @@
+diff --git a/next.config.ts b/next.config.ts
+index 32e5147..b363ff5 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
+   },
+   // Do not set output:'standalone' for Vercel — it can break App Router API routes.
+   transpilePackages: ['motion'],
++  // Keep firebase-admin (and its transitive jose/jwks-rsa deps) out of the
++  // webpack bundle. Bundling them mangles jose's ESM-only build and causes
++  // "ERR_REQUIRE_ESM" at runtime on Vercel. Native node_modules resolution
++  // handles the ESM/CJS interop correctly.
++  serverExternalPackages: ['firebase-admin', 'google-auth-library', 'jwks-rsa', 'jose', 'gcp-metadata'],
+   webpack: (config, {dev}) => {
+     // HMR is disabled in AI Studio via DISABLE_HMR env var.
+     // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

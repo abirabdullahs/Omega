@@ -77,8 +77,10 @@ function parseServiceAccountValue(raw: string) {
 function getServiceAccountFromEnv() {
   const candidates = [
     process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64,
     process.env.FIREBASE_SERVICE_ACCOUNT,
     process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64,
     process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
     process.env.GOOGLE_APPLICATION_CREDENTIALS,
     process.env.SERVICE_ACCOUNT_JSON,
@@ -182,7 +184,7 @@ function ensureFirebaseAdmin() {
     const serviceAccount = getServiceAccount();
     if (!serviceAccount) {
       adminInitError =
-        "Firebase Admin SDK is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_SERVICE_ACCOUNT_BASE64) in the Production environment on Vercel.";
+        "Firebase Admin SDK is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_JSON_BASE64, FIREBASE_SERVICE_ACCOUNT_BASE64, or GOOGLE_APPLICATION_CREDENTIALS in the Production environment on Vercel.";
       return;
     }
 

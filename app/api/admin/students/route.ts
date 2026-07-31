@@ -78,8 +78,12 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error("Error creating student:", error);
+    const initError = getAdminInitError();
     return NextResponse.json(
-      { error: error?.message || "Failed to create students" },
+      {
+        error: error?.message || "Failed to create students",
+        details: initError || undefined,
+      },
       { status: 500 }
     );
   }
@@ -105,8 +109,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(students);
   } catch (error: any) {
     console.error("Error listing students:", error);
+    const initError = getAdminInitError();
     return NextResponse.json(
-      { error: error?.message || "Failed to list students" },
+      {
+        error: error?.message || "Failed to list students",
+        details: initError || undefined,
+      },
       { status: 500 }
     );
   }
@@ -148,8 +156,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, message: "Student account deleted successfully" });
   } catch (error: any) {
     console.error("Error deleting student:", error);
+    const initError = getAdminInitError();
     return NextResponse.json(
-      { error: error?.message || "Failed to delete student" },
+      {
+        error: error?.message || "Failed to delete student",
+        details: initError || undefined,
+      },
       { status: 500 }
     );
   }
