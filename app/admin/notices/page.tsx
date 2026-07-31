@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/auth-provider";
 import { formatDateTime } from "@/lib/utils";
 import { Bell, Plus, Trash2, Link as LinkIcon, Clock } from "lucide-react";
 
@@ -25,14 +24,20 @@ export default function AdminNoticesPage() {
 
   const [reloadKey, setReloadKey] = useState(0);
 
+  const { user } = useAuth();
+
   useEffect(() => {
     let isMounted = true;
     async function fetchNotices() {
       try {
-        const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
-        const snap = await getDocs(q);
-        if (isMounted) {
-          setNotices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notice)));
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch(`${window.location.origin}/api/admin/notices`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.items)) {
+          if (isMounted) setNotices(data.items);
+        } else {
+          console.error('Notices API error:', data);
         }
       } catch (err) {
         console.error(err);
@@ -42,25 +47,32 @@ export default function AdminNoticesPage() {
     }
     fetchNotices();
     return () => { isMounted = false; };
-  }, [reloadKey]);
+  }, [reloadKey, user?.uid]);
 
   const handleAddNotice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !content) return;
+    if (!user) return alert("You must be signed in as admin to post notices.");
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "notices"), {
-        title,
-        content,
-        targetLink: targetLink || null,
-        createdAt: serverTimestamp(),
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/notices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title, content, targetLink }),
       });
-      setTitle("");
-      setContent("");
-      setTargetLink("");
-      setShowAdd(false);
-      setReloadKey(k => k + 1);
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setTitle("");
+        setContent("");
+        setTargetLink("");
+        setShowAdd(false);
+        setReloadKey(k => k + 1);
+      } else {
+        console.error('Create notice error:', data);
+        alert(data?.error || 'Failed to create notice');
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -70,9 +82,20 @@ export default function AdminNoticesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure?")) return;
+    if (!user) return alert("You must be signed in as admin.");
     try {
-      await deleteDoc(doc(db, "notices", id));
-      setReloadKey(k => k + 1);
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/notices?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setReloadKey(k => k + 1);
+      } else {
+        console.error('Delete notice error:', data);
+        alert(data?.error || 'Failed to delete notice');
+      }
     } catch (err) {
       console.error(err);
     }

@@ -66,29 +66,20 @@ export default function CoursePlanPage() {
     if (!user || selectedChapters.length === 0) return;
     setSubmitting(true);
     try {
-      const payload = {
-        userId: user.uid,
-        userName: userData?.name || user.email?.split("@")[0],
-        requestedChapters: selectedChapters,
-        status: "pending",
-        userPhone: userData?.phone || user.email?.split("@")[0],
-      };
-
-      // Edit existing pending request instead of stacking duplicates
-      if (lastRequestId && lastRequest?.status === "pending") {
-        await updateDoc(doc(db, "requests", lastRequestId), {
-          ...payload,
-          updatedAt: serverTimestamp(),
-        });
-        alert("Request updated successfully!");
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requestedChapters: selectedChapters, userName: userData?.name, userPhone: userData?.phone }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        alert(data.updated ? "Request updated successfully!" : "Request sent successfully!");
+        await fetchLastRequest(user.uid);
       } else {
-        await addDoc(collection(db, "requests"), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
-        alert("Request sent successfully!");
+        console.error('Requests API error:', data);
+        alert(data?.error || "Failed to send request.");
       }
-      await fetchLastRequest(user.uid);
     } catch (err) {
       console.error(err);
       alert("Failed to send request.");
