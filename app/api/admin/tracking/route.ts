@@ -69,9 +69,9 @@ export async function GET(req: NextRequest) {
               late.push(task.title || task.id);
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           // ignore per-student task read failures, continue
-          console.warn("Error checking submission for", student.id, err?.message || err);
+          console.warn("Error checking submission for", student.id, (err as any)?.message || String(err));
         }
       }
 

@@ -52,8 +52,8 @@ export async function GET(req: NextRequest) {
             feedback: data.feedback || null,
           });
         });
-      } catch (err) {
-        console.warn("Error reading entries for task", task.id, err?.message || err);
+      } catch (err: any) {
+        console.warn("Error reading entries for task", task.id, (err as any)?.message || String(err));
       }
     }
 
