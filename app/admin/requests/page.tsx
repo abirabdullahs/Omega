@@ -218,32 +218,53 @@ export default function AdminRequestsPage() {
                   {(selectedRequest.requestedChapters || []).length === 0 ? (
                     <p className="text-sm text-neutral-400">No chapters in this request.</p>
                   ) : (
-                    (selectedRequest.requestedChapters || []).map((chapterId) => {
-                      const meta = findChapterMeta(chapterId);
+                    SUBJECTS.map((subject) => {
+                      const chaptersForSubject = (selectedRequest.requestedChapters || []).filter(cid => {
+                        const m = findChapterMeta(cid);
+                        return m?.subject.id === subject.id;
+                      });
                       return (
-                        <div key={chapterId} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-3">
+                        <div key={subject.id} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-3">
                           <div>
                             <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
-                              {meta?.subject.name || "Subject"}
-                            </p>
-                            <p className="text-sm font-bold text-neutral-900 mt-1">
-                              {meta?.chapter.name || chapterId}
+                              {subject.name}
                             </p>
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">
-                              Deadline
-                            </label>
-                            <div className="relative">
-                              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
-                              <input
-                                type="date"
-                                required
-                                value={deadlines[chapterId] || ""}
-                                onChange={(e) => setDeadlines({ ...deadlines, [chapterId]: e.target.value })}
-                                className="w-full pl-12 pr-4 py-3 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-neutral-900 bg-white"
-                              />
-                            </div>
+                          <div className="space-y-2">
+                            {chaptersForSubject.length === 0 ? (
+                              <p className="text-xs text-neutral-400">No chapters requested in this subject.</p>
+                            ) : (
+                              chaptersForSubject.map((chapterId) => {
+                                const meta = findChapterMeta(chapterId);
+                                const selected = selectedPerSubject[subject.id] === chapterId;
+                                return (
+                                  <div key={chapterId} className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 bg-white">
+                                    <div className="flex items-center space-x-3">
+                                      <input
+                                        type="radio"
+                                        name={`sel-${subject.id}`}
+                                        checked={selected}
+                                        onChange={() => setSelectedPerSubject({ ...selectedPerSubject, [subject.id]: chapterId })}
+                                      />
+                                      <div>
+                                        <p className="text-sm font-bold text-neutral-900">{meta?.chapter.name || chapterId}</p>
+                                        <p className="text-[10px] text-neutral-400">Paper {meta?.chapter.paper}</p>
+                                      </div>
+                                    </div>
+                                    <div className="w-40">
+                                      <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Deadline</label>
+                                      <input
+                                        type="date"
+                                        value={deadlines[chapterId] || ""}
+                                        onChange={(e) => setDeadlines({ ...deadlines, [chapterId]: e.target.value })}
+                                        className="w-full pl-3 pr-2 py-2 border border-neutral-200 rounded-xl text-sm bg-white"
+                                        disabled={!selected}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
                           </div>
                         </div>
                       );
