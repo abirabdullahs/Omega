@@ -11,7 +11,11 @@ export default function RootPage() {
   useEffect(() => {
     if (!loading) {
       if (user && userData) {
-        router.push(userData.role === "admin" ? "/admin" : "/student");
+        if (!userData.passwordChanged) {
+          router.push("/login");
+        } else {
+          router.push(userData.role === "admin" ? "/admin" : "/student");
+        }
       } else {
         router.push("/login");
       }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query, orderBy, doc, updateDoc, addDoc, serverTimestamp, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SUBJECTS } from "@/lib/subjects";
+import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import { CheckCircle2, Clock, User, Calendar, Send, Info, X } from "lucide-react";
 
 interface Request {
@@ -23,23 +24,26 @@ export default function AdminRequestsPage() {
   const [assignment, setAssignment] = useState<Record<string, string>>({});
   const [deadline, setDeadline] = useState("");
   const [isAssigning, setIsAssigning] = useState(false);
-
-  const fetchRequests = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "requests"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
-      const snap = await getDocs(q);
-      setRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Request)));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let isMounted = true;
+    async function fetchRequests() {
+      try {
+        const q = query(collection(db, "requests"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+        if (isMounted) {
+          setRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Request)));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
     fetchRequests();
-  }, []);
+    return () => { isMounted = false; };
+  }, [reloadKey]);
 
   const handleSelectRequest = (req: Request) => {
     setSelectedRequest(req);
@@ -74,7 +78,7 @@ export default function AdminRequestsPage() {
       }
 
       // 2. Create new assignment
-      const deadlineDate = new Date(deadline);
+      const deadlineDate = parseDateInputLocal(deadline);
       await addDoc(collection(db, "assignments"), {
         userId: selectedRequest.userId,
         chapters: assignment,
@@ -87,7 +91,7 @@ export default function AdminRequestsPage() {
       await updateDoc(doc(db, "requests", selectedRequest.id), { status: "approved" });
 
       setSelectedRequest(null);
-      fetchRequests();
+      setReloadKey(k => k + 1);
       alert("Chapters assigned successfully!");
     } catch (err) {
       console.error(err);
@@ -138,19 +142,19 @@ export default function AdminRequestsPage() {
                   </div>
                   <div>
                     <p className="font-bold text-neutral-900">{req.userName || req.userPhone || "Student"}</p>
-                    <p className="text-[10px] text-neutral-400 font-medium uppercase tracking-widest">Phone: {req.userPhone} • Submitted {req.createdAt?.toDate().toLocaleDateString()}</p>
+                    <p className="text-[10px] text-neutral-400 font-medium uppercase tracking-widest">Phone: {req.userPhone} • Submitted {formatDate(req.createdAt)}</p>
                   </div>
                 </div>
                 <span className="bg-amber-50 text-amber-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Pending</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {req.requestedChapters.slice(0, 4).map(cid => (
+                {(req.requestedChapters || []).slice(0, 4).map(cid => (
                   <span key={cid} className="text-[10px] font-medium bg-neutral-50 text-neutral-500 px-2 py-1 rounded-lg border border-neutral-100">
                     {getChapterName(cid)}
                   </span>
                 ))}
-                {req.requestedChapters.length > 4 && (
-                  <span className="text-[10px] font-medium text-neutral-300">+{req.requestedChapters.length - 4} more</span>
+                {(req.requestedChapters || []).length > 4 && (
+                  <span className="text-[10px] font-medium text-neutral-300">+{(req.requestedChapters || []).length - 4} more</span>
                 )}
               </div>
             </button>

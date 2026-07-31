@@ -32,8 +32,15 @@ service cloud.firestore {
     // Submissions collection
     match /submissions/{taskId}/entries/{studentId} {
       allow read: if isAdmin() || (isStudent() && request.auth.uid == studentId);
-      allow write: if isStudent() && request.auth.uid == studentId;
-      allow update: if isAdmin(); // For grading
+      allow create: if isStudent()
+        && request.auth.uid == studentId
+        && !('grade' in request.resource.data)
+        && !('feedback' in request.resource.data);
+      allow update: if isAdmin()
+        || (isStudent()
+            && request.auth.uid == studentId
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['text', 'submittedAt', 'studentId', 'studentPhone']));
     }
 
     // Notices collection
@@ -53,6 +60,12 @@ service cloud.firestore {
     match /assignments/{assignmentId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow write: if isAdmin();
+    }
+
+    // Ephemeral chat — client read only; writes via Admin SDK / Socket server
+    match /chats/{studentId}/messages/{messageId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == studentId);
+      allow write: if false;
     }
   }
 }

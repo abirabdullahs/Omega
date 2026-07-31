@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { formatDateTime } from "@/lib/utils";
 import { Bell, Plus, Trash2, Link as LinkIcon, Clock } from "lucide-react";
 
 interface Notice {
@@ -22,22 +23,26 @@ export default function AdminNoticesPage() {
   const [targetLink, setTargetLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchNotices();
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const fetchNotices = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
-      const snap = await getDocs(q);
-      setNotices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notice)));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchNotices() {
+      try {
+        const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+        if (isMounted) {
+          setNotices(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notice)));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
-  };
+    fetchNotices();
+    return () => { isMounted = false; };
+  }, [reloadKey]);
 
   const handleAddNotice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +60,7 @@ export default function AdminNoticesPage() {
       setContent("");
       setTargetLink("");
       setShowAdd(false);
-      fetchNotices();
+      setReloadKey(k => k + 1);
     } catch (err) {
       console.error(err);
     } finally {
@@ -67,7 +72,7 @@ export default function AdminNoticesPage() {
     if (!confirm("Are you sure?")) return;
     try {
       await deleteDoc(doc(db, "notices", id));
-      fetchNotices();
+      setReloadKey(k => k + 1);
     } catch (err) {
       console.error(err);
     }
@@ -166,7 +171,7 @@ export default function AdminNoticesPage() {
                 )}
                 <div className="flex items-center text-[10px] text-neutral-400 mt-4">
                   <Clock size={12} className="mr-1" />
-                  {notice.createdAt?.toDate().toLocaleString()}
+                  {formatDateTime(notice.createdAt)}
                 </div>
               </div>
             </div>

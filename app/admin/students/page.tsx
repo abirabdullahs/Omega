@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { UserPlus, Search, Phone, ShieldCheck, ShieldAlert } from "lucide-react";
+import { UserPlus, Search, Phone, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 
 interface Student {
   id: string;
@@ -13,29 +14,60 @@ interface Student {
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const { user } = useAuth();
 
-  const fetchStudents = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/students");
-      const data = await res.json();
-      setStudents(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const getAuthHeaders = async (): Promise<HeadersInit> => {
+    if (!user) throw new Error("Not authenticated");
+    const token = await user.getIdToken();
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
   };
 
   useEffect(() => {
+    let isMounted = true;
+    async function fetchStudents() {
+      if (!user) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/admin/students", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (isMounted) {
+          if (res.ok && Array.isArray(data)) {
+            setStudents(data);
+          } else {
+            setStudents([]);
+            if (data.error) setError(data.error);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
     fetchStudents();
-  }, []);
+    return () => { isMounted = false; };
+  }, [reloadKey, user]);
+
+  const filteredStudents = students.filter(s =>
+    (s.name?.toLowerCase().includes(search.toLowerCase())) ||
+    (s.phone?.includes(search))
+  );
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,17 +77,18 @@ export default function StudentsPage() {
     try {
       const res = await fetch("/api/admin/students", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ students: [{ phone, name }] }),
       });
       const data = await res.json();
-      if (data.success) {
+      const first = data.results?.[0];
+      if (res.ok && data.success && first?.success) {
         setSuccess(`Student added successfully!`);
         setPhone("");
         setName("");
-        fetchStudents();
+        setReloadKey(k => k + 1);
       } else {
-        setError(data.error);
+        setError(first?.error || data.error || "Failed to add student");
       }
     } catch (err) {
       setError("Failed to add student");
@@ -79,17 +112,22 @@ export default function StudentsPage() {
     try {
       const res = await fetch("/api/admin/students", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ students: studentList }),
       });
       const data = await res.json();
-      if (data.success) {
-        const successes = data.results.filter((r: any) => r.success).length;
-        setSuccess(`${successes} students added successfully!`);
+      if (res.ok && data.success) {
+        const successes = data.results?.filter((r: any) => r.success).length ?? 0;
+        const failures = data.failureCount ?? 0;
+        setSuccess(
+          failures > 0
+            ? `${successes} students added (${failures} failed).`
+            : `${successes} students added successfully!`
+        );
         setBulkText("");
-        fetchStudents();
+        setReloadKey(k => k + 1);
       } else {
-        setError(data.error);
+        setError(data.error || "Failed to add students");
       }
     } catch (err) {
       setError("Failed to add students");
@@ -197,6 +235,8 @@ export default function StudentsPage() {
                 </span>
                 <input
                   type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search students..."
                   className="block w-full pl-10 pr-3 py-1.5 text-sm border border-neutral-200 rounded-lg focus:ring-1 focus:ring-neutral-900"
                 />
@@ -216,11 +256,11 @@ export default function StudentsPage() {
                     <tr>
                       <td colSpan={3} className="px-6 py-10 text-center text-neutral-400">Loading students...</td>
                     </tr>
-                  ) : students.length === 0 ? (
+                  ) : filteredStudents.length === 0 ? (
                     <tr>
                       <td colSpan={3} className="px-6 py-10 text-center text-neutral-400">No students found.</td>
                     </tr>
-                  ) : students.map((student) => (
+                  ) : filteredStudents.map((student) => (
                     <tr key={student.id} className="hover:bg-neutral-50/50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
@@ -245,7 +285,9 @@ export default function StudentsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="text-neutral-300 group-hover:text-neutral-900 text-[10px] font-bold uppercase tracking-widest hover:underline transition-all">Details</button>
+                        <span className="text-neutral-400 text-[10px] font-medium">
+                          {student.passwordChanged ? "Ready" : "Needs password change"}
+                        </span>
                       </td>
                     </tr>
                   ))}

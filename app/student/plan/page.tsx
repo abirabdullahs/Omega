@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
-import { SUBJECTS, Chapter } from "@/lib/subjects";
+import { SUBJECTS } from "@/lib/subjects";
 import { CheckCircle2, Circle, Send, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 export default function CoursePlanPage() {
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
@@ -15,29 +16,38 @@ export default function CoursePlanPage() {
   const [expandedSubject, setExpandedSubject] = useState<string | null>(SUBJECTS[0].id);
   const { user, userData } = useAuth();
 
+  const fetchLastRequest = async (uid: string) => {
+    const q = query(
+      collection(db, "requests"),
+      where("userId", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const data = snap.docs[0].data();
+      setLastRequest(data);
+      setSelectedChapters(data.requestedChapters || []);
+    } else {
+      setLastRequest(null);
+    }
+  };
+
   useEffect(() => {
-    async function fetchLastRequest() {
-      if (!user) return;
+    async function load() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       try {
-        const q = query(
-          collection(db, "requests"),
-          where("userId", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(1)
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          setLastRequest(data);
-          setSelectedChapters(data.requestedChapters || []);
-        }
+        await fetchLastRequest(user.uid);
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     }
-    fetchLastRequest();
+    load();
   }, [user]);
 
   const toggleChapter = (chapterId: string) => {
@@ -60,6 +70,7 @@ export default function CoursePlanPage() {
         status: "pending",
         userPhone: userData?.phone || user.email?.split("@")[0]
       });
+      await fetchLastRequest(user.uid);
       alert("Request sent successfully!");
     } catch (err) {
       console.error(err);
@@ -83,7 +94,7 @@ export default function CoursePlanPage() {
           <Info className="w-5 h-5 text-amber-600 mt-0.5" />
           <div className="text-sm text-amber-800">
             <p className="font-bold">Last request status: {lastRequest.status.toUpperCase()}</p>
-            <p>Submitted on {lastRequest.createdAt?.toDate().toLocaleDateString()}. You can update your selection and send a new request if needed.</p>
+            <p>Submitted on {formatDate(lastRequest.createdAt)}. You can update your selection and send a new request if needed.</p>
           </div>
         </div>
       )}

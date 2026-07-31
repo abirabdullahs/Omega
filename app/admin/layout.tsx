@@ -12,12 +12,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading && (!user || userData?.role !== "admin")) {
-      router.push("/login");
+    if (!loading) {
+      if (!user || userData?.role !== "admin") {
+        router.push("/login");
+      } else if (userData && userData.passwordChanged === false) {
+        router.push("/login");
+      }
     }
   }, [user, userData, loading, router]);
 
-  if (loading || !user || userData?.role !== "admin") {
+  if (loading || !user || userData?.role !== "admin" || userData.passwordChanged === false) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900"></div>

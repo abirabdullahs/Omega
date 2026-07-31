@@ -5,11 +5,20 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
+export interface UserProfile {
+  phone?: string;
+  name?: string;
+  role?: "admin" | "student" | string;
+  passwordChanged?: boolean;
+  [key: string]: unknown;
+}
+
 interface AuthContextType {
   user: User | null;
-  userData: any | null;
+  userData: UserProfile | null;
   loading: boolean;
   logout: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,28 +26,42 @@ const AuthContext = createContext<AuthContextType>({
   userData: null,
   loading: true,
   logout: async () => {},
+  refreshUserData: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userData, setUserData] = useState<any | null>(null);
+  const [userData, setUserData] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadUserData = async (uid: string) => {
+    if (!db) {
+      setUserData(null);
+      return;
+    }
+    try {
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.exists()) {
+        setUserData(userDoc.data() as UserProfile);
+      } else {
+        setUserData(null);
+      }
+    } catch (err) {
+      console.error("Error fetching user data:", err);
+      setUserData(null);
+    }
+  };
 
   useEffect(() => {
     if (!auth || !db) {
-      setUser(null);
-      setUserData(null);
       setLoading(false);
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-        }
+    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      setUser(nextUser);
+      if (nextUser) {
+        await loadUserData(nextUser.uid);
       } else {
         setUserData(null);
       }
@@ -53,8 +76,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await auth.signOut();
   };
 
+  const refreshUserData = async () => {
+    if (!user) {
+      setUserData(null);
+      return;
+    }
+    await loadUserData(user.uid);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userData, loading, logout }}>
+    <AuthContext.Provider value={{ user, userData, loading, logout, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );

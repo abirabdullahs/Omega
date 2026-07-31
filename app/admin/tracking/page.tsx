@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { User, Clock, AlertCircle, Trash2, ShieldAlert } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { Clock, AlertCircle, Trash2, ShieldAlert } from "lucide-react";
 
 interface Student {
   id: string;
@@ -28,9 +29,9 @@ export default function TrackingPage() {
   const [defaulters, setDefaulters] = useState<DefaulterInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const fetchPerformanceData = async () => {
-    setLoading(true);
     try {
       // 1. Get all students
       const studentSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
@@ -53,7 +54,9 @@ export default function TrackingPage() {
           const subRef = doc(db, "submissions", task.id, "entries", student.id);
           const subSnap = await getDoc(subRef);
 
-          const deadlineDate = task.deadline.toDate();
+          const deadlineDate = typeof task.deadline?.toDate === "function" ? task.deadline.toDate() : new Date(task.deadline);
+          if (Number.isNaN(deadlineDate.getTime())) continue;
+
           const now = new Date();
 
           if (!subSnap.exists()) {
@@ -62,8 +65,9 @@ export default function TrackingPage() {
             }
           } else {
             const submissionData = subSnap.data();
-            const submittedAt = submissionData.submittedAt?.toDate();
-            if (submittedAt && submittedAt > deadlineDate) {
+            const rawSub = submissionData.submittedAt;
+            const submittedAt = typeof rawSub?.toDate === "function" ? rawSub.toDate() : rawSub ? new Date(rawSub) : null;
+            if (submittedAt && !Number.isNaN(submittedAt.getTime()) && submittedAt > deadlineDate) {
               late.push(task.title);
             }
           }
@@ -88,12 +92,25 @@ export default function TrackingPage() {
 
   const handleRemoveStudent = async (studentId: string) => {
     if (!confirm("Are you sure you want to remove this student from the programme? This action is permanent.")) return;
-    
+    if (!user) {
+      alert("You must be signed in to remove a student.");
+      return;
+    }
+
     setRemovingId(studentId);
     try {
-      await deleteDoc(doc(db, "users", studentId));
-      setDefaulters(prev => prev.filter(d => d.student.id !== studentId));
-      alert("Student removed successfully.");
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/students?studentId=${studentId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setDefaulters(prev => prev.filter(d => d.student.id !== studentId));
+        alert("Student removed successfully.");
+      } else {
+        alert(data.error || "Failed to remove student. Auth and profile were not deleted.");
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to remove student.");

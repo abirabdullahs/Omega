@@ -8,6 +8,7 @@ import { useRouter, useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { ChevronLeft, Send, CheckCircle2, MessageSquare } from "lucide-react";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 export default function StudentTaskPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,7 @@ export default function StudentTaskPage() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function StudentTaskPage() {
         text,
         submittedAt: serverTimestamp(),
         studentId: user.uid,
-        studentPhone: user.email?.split("@")[0] // Rough way to get phone
+        studentPhone: userData?.phone || user.email?.split("@")[0] || ""
       }, { merge: true });
       
       const updatedSub = await getDoc(doc(db, "submissions", id, "entries", user.uid));
@@ -84,10 +85,10 @@ export default function StudentTaskPage() {
         <div className="p-8 border-b border-neutral-100 bg-neutral-50/30">
           <h1 className="text-3xl font-bold text-neutral-900 mb-2">{task.title}</h1>
           <div className="flex flex-wrap items-center gap-4 text-sm text-neutral-500">
-            <span>Posted on {task.createdAt?.toDate().toLocaleDateString()}</span>
+            <span>Posted on {formatDate(task.createdAt)}</span>
             {task.deadline && (
               <span className="flex items-center text-red-500 font-bold bg-red-50 px-3 py-1 rounded-full">
-                Deadline: {task.deadline?.toDate().toLocaleDateString()}
+                Deadline: {formatDate(task.deadline)}
               </span>
             )}
           </div>

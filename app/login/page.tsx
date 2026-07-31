@@ -17,22 +17,27 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, refreshUserData } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading && user && userData) {
-      if (!userData.passwordChanged) {
-        setShowPasswordChange(true);
-      } else {
+      if (userData.passwordChanged) {
         router.push(userData.role === "admin" ? "/admin" : "/student");
       }
     }
   }, [user, userData, loading, router]);
 
+  const isPasswordChangeRequired = !loading && !!user && !!userData && !userData.passwordChanged;
+  const isChangingPassword = showPasswordChange || isPasswordChangeRequired;
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!auth) {
+      setError("Firebase is not configured. Check your environment variables.");
+      return;
+    }
     try {
       const loginValue = phone.trim();
       const email = loginValue.includes("@")
@@ -49,6 +54,10 @@ export default function LoginPage() {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!auth || !db) {
+      setError("Firebase is not configured. Check your environment variables.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match");
       return;
@@ -78,6 +87,7 @@ export default function LoginPage() {
       await updateDoc(doc(db, "users", auth.currentUser.uid), {
         passwordChanged: true
       });
+      await refreshUserData();
 
       const role = userData?.role || "student";
       router.push(role === "admin" ? "/admin" : "/student");
@@ -103,10 +113,10 @@ export default function LoginPage() {
             <span className="text-amber-500 font-black text-2xl">Ω</span>
           </div>
           <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900">
-            {showPasswordChange ? "Update Password" : "Welcome to Omega"}
+            {isChangingPassword ? "Update Password" : "Welcome to Omega"}
           </h2>
           <p className="mt-2 text-center text-sm text-neutral-500">
-            {showPasswordChange 
+            {isChangingPassword 
               ? "You must change your password before continuing."
               : "Premium Mentorship Platform"}
           </p>
@@ -118,7 +128,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {showPasswordChange ? (
+        {isChangingPassword ? (
           <form className="mt-8 space-y-6" onSubmit={handlePasswordChange}>
             <div className="space-y-4">
               <div>

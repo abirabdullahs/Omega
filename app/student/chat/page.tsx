@@ -22,7 +22,7 @@ export default function StudentChatPage() {
             roomId={user.uid} 
             currentUser={{
               uid: user.uid,
-              name: userData.name || userData.phone,
+              name: userData.name || userData.phone || "Student",
               role: "student"
             }} 
           />

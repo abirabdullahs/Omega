@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { collection, query, orderBy, getDocs, limit, where, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Send, User, Shield, Clock } from "lucide-react";
+import { collection, query, orderBy, getDocs, where } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { Send, User, Shield, Clock, MessageSquare } from "lucide-react";
 
 interface Message {
+  id?: string;
   senderId: string;
   senderName: string;
   text: string;
@@ -26,22 +27,25 @@ interface ChatInterfaceProps {
 export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. Fetch initial messages from Firestore (within 10 min window)
+    let cancelled = false;
+
     const fetchMessages = async () => {
+      if (!db) return;
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const q = query(
         collection(db, "chats", roomId, "messages"),
         where("createdAt", ">=", tenMinutesAgo),
         orderBy("createdAt", "asc")
       );
-      
+
       try {
         const snap = await getDocs(q);
-        const initialMsgs = snap.docs.map(d => d.data() as Message);
+        if (cancelled) return;
+        const initialMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
         setMessages(initialMsgs);
       } catch (err) {
         console.error("Error fetching chat history:", err);
@@ -50,20 +54,35 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
 
     fetchMessages();
 
-    // 2. Setup Socket.io
-    const newSocket = io();
-    setSocket(newSocket);
+    const connectSocket = async () => {
+      if (!auth?.currentUser) return;
+      const token = await auth.currentUser.getIdToken();
+      if (cancelled) return;
 
-    newSocket.on("connect", () => {
-      newSocket.emit("join", roomId);
-    });
+      const newSocket = io({
+        auth: { token },
+      });
+      socketRef.current = newSocket;
 
-    newSocket.on("receive_message", (msg: Message) => {
-      setMessages(prev => [...prev, msg]);
-    });
+      newSocket.on("connect", () => {
+        newSocket.emit("join", roomId);
+      });
+
+      newSocket.on("receive_message", (msg: Message) => {
+        setMessages(prev => [...prev, msg]);
+      });
+
+      newSocket.on("connect_error", (err) => {
+        console.error("Socket connection error:", err.message);
+      });
+    };
+
+    connectSocket();
 
     return () => {
-      newSocket.disconnect();
+      cancelled = true;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
     };
   }, [roomId]);
 
@@ -74,17 +93,12 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim() || !socket) return;
+    if (!input.trim() || !socketRef.current) return;
 
-    const msgData = {
+    socketRef.current.emit("send_message", {
       roomId,
-      senderId: currentUser.uid,
-      senderName: currentUser.name || "User",
-      text: input,
-      role: currentUser.role,
-    };
-
-    socket.emit("send_message", msgData);
+      text: input.trim(),
+    });
     setInput("");
   };
 
@@ -116,7 +130,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
         )}
         {messages.map((msg, i) => (
           <div 
-            key={i} 
+            key={msg.id || `${msg.senderId}-${msg.createdAt?.seconds || msg.createdAt}-${i}`} 
             className={`flex flex-col ${msg.senderId === currentUser.uid ? 'items-end' : 'items-start'}`}
           >
             <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
@@ -140,7 +154,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type a message..."
             className="w-full pl-4 pr-12 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl text-sm focus:ring-2 focus:ring-neutral-900 focus:bg-white transition-all outline-none"
           />
@@ -155,5 +169,3 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
     </div>
   );
 }
-
-import { MessageSquare } from "lucide-react";

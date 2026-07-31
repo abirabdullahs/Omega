@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
+import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
-import { Plus, BookOpen, Clock, FileText, Eye, Calendar } from "lucide-react";
+import { Plus, Clock, FileText, Eye, Calendar, Trash2, X } from "lucide-react";
 
 interface Task {
   id: string;
@@ -23,14 +24,15 @@ export default function AdminTasksPage() {
   const [content, setContent] = useState("");
   const [deadline, setDeadline] = useState("");
   const [preview, setPreview] = useState(false);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { user } = useAuth();
 
   const fetchTasks = async () => {
-    setLoading(true);
     try {
       const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
-      setTasks(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
+      setTasks(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Task)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -52,7 +54,7 @@ export default function AdminTasksPage() {
         contentMarkdown: content,
         createdAt: serverTimestamp(),
         createdBy: user?.uid,
-        deadline: deadline ? Timestamp.fromDate(new Date(deadline)) : null,
+        deadline: deadline ? Timestamp.fromDate(parseDateInputLocal(deadline)) : null,
       });
       setTitle("");
       setContent("");
@@ -61,6 +63,21 @@ export default function AdminTasksPage() {
       fetchTasks();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Delete this task permanently?")) return;
+    setDeletingId(taskId);
+    try {
+      await deleteDoc(doc(db, "tasks", taskId));
+      if (viewingTask?.id === taskId) setViewingTask(null);
+      fetchTasks();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete task.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -179,12 +196,12 @@ export default function AdminTasksPage() {
               <div className="flex flex-col items-end text-[10px] text-neutral-400 font-medium uppercase tracking-wider space-y-1">
                 <div className="flex items-center">
                   <Clock className="w-3 h-3 mr-1" />
-                  Created: {task.createdAt?.toDate().toLocaleDateString() || "Just now"}
+                  Created: {formatDate(task.createdAt) || "Just now"}
                 </div>
                 {task.deadline && (
                   <div className="flex items-center text-red-500">
                     <Calendar className="w-3 h-3 mr-1" />
-                    Due: {task.deadline?.toDate().toLocaleDateString()}
+                    Due: {formatDate(task.deadline)}
                   </div>
                 )}
               </div>
@@ -194,14 +211,52 @@ export default function AdminTasksPage() {
               {task.contentMarkdown.replace(/[#*`]/g, "")}
             </p>
             <div className="pt-4 border-t border-neutral-50 flex justify-between items-center">
-              <button className="text-xs font-semibold text-neutral-900 hover:underline flex items-center">
+              <button
+                type="button"
+                onClick={() => setViewingTask(task)}
+                className="text-xs font-semibold text-neutral-900 hover:underline flex items-center"
+              >
                 <Eye className="w-3 h-3 mr-1" /> View Details
               </button>
-              <button className="text-xs font-semibold text-neutral-500 hover:text-red-600">Delete</button>
+              <button
+                type="button"
+                onClick={() => handleDeleteTask(task.id)}
+                disabled={deletingId === task.id}
+                className="text-xs font-semibold text-neutral-500 hover:text-red-600 disabled:opacity-50 flex items-center"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                {deletingId === task.id ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {viewingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-xl flex flex-col">
+            <div className="p-6 border-b border-neutral-100 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-neutral-900">{viewingTask.title}</h3>
+                <p className="text-xs text-neutral-400 mt-1">
+                  Created {formatDate(viewingTask.createdAt) || "—"}
+                  {viewingTask.deadline ? ` · Due ${formatDate(viewingTask.deadline)}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTask(null)}
+                className="text-neutral-400 hover:text-neutral-900"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto prose prose-sm max-w-none">
+              <ReactMarkdown>{viewingTask.contentMarkdown}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

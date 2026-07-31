@@ -3,36 +3,80 @@ import { parse } from "url";
 import next from "next";
 import { Server } from "socket.io";
 import express from "express";
-import { db, adminInitError } from "./lib/firebase-admin.ts";
+import { auth, db, adminInitError } from "./lib/firebase-admin.ts";
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
 const handle = app.getRequestHandler();
+const appOrigin = process.env.APP_URL || "http://localhost:3000";
 
 app.prepare().then(() => {
   const expressApp = express();
   const httpServer = createServer(expressApp);
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
+      origin: appOrigin,
     },
   });
 
-  // Socket.io logic
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token || !auth || !db) {
+        return next(new Error("Unauthorized"));
+      }
+
+      const decoded = await auth.verifyIdToken(token);
+      const userDoc = await db.collection("users").doc(decoded.uid).get();
+      if (!userDoc.exists) {
+        return next(new Error("Unauthorized"));
+      }
+
+      const profile = userDoc.data();
+      socket.data.uid = decoded.uid;
+      socket.data.role = profile?.role;
+      socket.data.name = profile?.name || profile?.phone || "User";
+      next();
+    } catch {
+      next(new Error("Unauthorized"));
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
 
-    socket.on("join", (roomId) => {
+    socket.on("join", (roomId: string) => {
+      if (!roomId || typeof roomId !== "string") return;
+
+      const { uid, role } = socket.data;
+      if (role === "student" && roomId !== uid) {
+        socket.emit("error_message", { error: "Cannot join another student's chat" });
+        return;
+      }
+      if (role !== "admin" && role !== "student") {
+        socket.emit("error_message", { error: "Unauthorized role" });
+        return;
+      }
+
       socket.join(roomId);
       console.log(`Socket ${socket.id} joined room ${roomId}`);
     });
 
-    socket.on("send_message", async (data) => {
-      const { roomId, senderId, senderName, text, role } = data;
+    socket.on("send_message", async (data: { roomId?: string; text?: string }) => {
+      const roomId = data?.roomId;
+      const text = typeof data?.text === "string" ? data.text.trim() : "";
+      if (!roomId || !text) return;
+
+      const { uid, role, name } = socket.data;
+      if (role === "student" && roomId !== uid) {
+        socket.emit("error_message", { error: "Cannot send to another student's chat" });
+        return;
+      }
+      if (role !== "admin" && role !== "student") return;
 
       const messageData = {
-        senderId,
-        senderName,
+        senderId: uid,
+        senderName: name,
         text,
         role,
         createdAt: new Date(),
@@ -45,11 +89,8 @@ app.prepare().then(() => {
       }
 
       try {
-        // Persist to Firestore for the 10-minute window
-        await db.collection("chats").doc(roomId).collection("messages").add(messageData);
-
-        // Broadcast to the room
-        io.to(roomId).emit("receive_message", messageData);
+        const docRef = await db.collection("chats").doc(roomId).collection("messages").add(messageData);
+        io.to(roomId).emit("receive_message", { id: docRef.id, ...messageData });
       } catch (error) {
         console.error("Error saving message:", error);
       }
@@ -63,7 +104,6 @@ app.prepare().then(() => {
   if (!db) {
     console.warn("Firestore Admin SDK unavailable; cleanup job disabled.", adminInitError);
   } else {
-    // Background Cleanup Job: Every 1 minute, delete messages older than 10 minutes
     setInterval(async () => {
       try {
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -90,7 +130,6 @@ app.prepare().then(() => {
     }, 60 * 1000);
   }
 
-  // Next.js handler
   expressApp.all(/.*/, (req, res) => {
     const parsedUrl = parse(req.url!, true);
     handle(req, res, parsedUrl);

@@ -4,6 +4,22 @@ import { formatPhoneToEmail } from "@/lib/auth-utils";
 
 export async function GET(req: NextRequest) {
   try {
+    const setupSecret = process.env.SETUP_SECRET;
+    if (!setupSecret) {
+      return NextResponse.json(
+        { error: "Setup is locked. Set SETUP_SECRET in the environment to enable bootstrap." },
+        { status: 403 }
+      );
+    }
+
+    const provided =
+      req.headers.get("x-setup-secret") ||
+      new URL(req.url).searchParams.get("secret");
+
+    if (!provided || provided !== setupSecret) {
+      return NextResponse.json({ error: "Invalid or missing setup secret" }, { status: 403 });
+    }
+
     if (!auth || !db) {
       return NextResponse.json(
         {
@@ -15,7 +31,7 @@ export async function GET(req: NextRequest) {
     }
 
     const usersCount = (await db.collection("users").count().get()).data().count;
-    
+
     if (usersCount > 0) {
       return NextResponse.json({ message: "System already setup" }, { status: 403 });
     }
@@ -36,11 +52,16 @@ export async function GET(req: NextRequest) {
       passwordChanged: true,
     });
 
-    return NextResponse.json({ 
-      message: "Admin created successfully", 
-      phone: adminPhone, 
-      password: adminPassword 
-    });
+    const payload: Record<string, string> = {
+      message: "Admin created successfully",
+      phone: adminPhone,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      payload.password = adminPassword;
+    }
+
+    return NextResponse.json(payload);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

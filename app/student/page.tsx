@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
 import { BookOpen, CheckCircle2, Circle, Clock, ChevronRight, Zap, History } from "lucide-react";
 import { SUBJECTS } from "@/lib/subjects";
+import { formatDate } from "@/lib/utils";
 
 interface Task {
   id: string;
@@ -34,11 +35,15 @@ export default function StudentDashboard() {
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
     async function fetchData() {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         // Fetch Assignments
@@ -112,7 +117,7 @@ export default function StudentDashboard() {
                 <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-right">
                   <p className="text-[10px] text-neutral-400 font-bold uppercase">Deadline</p>
                   <p className="text-sm font-bold text-amber-400">
-                    {runningAssignment.deadline?.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {formatDate(runningAssignment.deadline, { day: 'numeric', month: 'short' })}
                   </p>
                 </div>
               </div>
@@ -148,7 +153,7 @@ export default function StudentDashboard() {
           <span className="text-sm text-neutral-500">Tap a task for details and submission status.</span>
         </div>
         <div className="grid grid-cols-1 gap-3">
-          {tasks.slice(0, 5).map((task) => {
+          {(showAllTasks ? tasks : tasks.slice(0, 5)).map((task) => {
             const submission = submissions[task.id];
             const isDone = !!submission;
             return (
@@ -170,7 +175,7 @@ export default function StudentDashboard() {
                       {task.deadline && !isDone && (
                         <span className="text-[10px] font-bold text-red-500 flex items-center">
                           <Clock size={10} className="mr-1" />
-                          Due: {task.deadline?.toDate().toLocaleDateString()}
+                          Due: {formatDate(task.deadline)}
                         </span>
                       )}
                     </div>
@@ -181,8 +186,12 @@ export default function StudentDashboard() {
             );
           })}
           {tasks.length > 5 && (
-            <button className="text-xs font-bold text-neutral-400 py-2 hover:text-neutral-900 transition-colors text-left">
-              View all tasks
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((v) => !v)}
+              className="text-xs font-bold text-neutral-400 py-2 hover:text-neutral-900 transition-colors text-left"
+            >
+              {showAllTasks ? "Show fewer tasks" : "View all tasks"}
             </button>
           )}
         </div>
@@ -199,7 +208,7 @@ export default function StudentDashboard() {
             {pastAssignments.map((pa) => (
               <div key={pa.id} className="bg-white p-4 rounded-2xl border border-neutral-100 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-3">
-                  <p className="text-xs font-bold text-neutral-500">Cycle ended {pa.deadline?.toDate().toLocaleDateString()}</p>
+                  <p className="text-xs font-bold text-neutral-500">Cycle ended {formatDate(pa.deadline)}</p>
                   <span className="text-[10px] font-bold bg-neutral-100 text-neutral-400 px-2 py-0.5 rounded-md uppercase">Archive</span>
                 </div>
                 <div className="flex flex-wrap gap-2">

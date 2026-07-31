@@ -34,7 +34,7 @@ export default function AdminChatDashboard() {
 
   const filteredStudents = students.filter(s => 
     (s.name?.toLowerCase().includes(search.toLowerCase())) || 
-    (s.phone.includes(search))
+    (s.phone?.includes(search))
   );
 
   if (!user || !userData) return null;

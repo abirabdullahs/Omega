@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, collectionGroup, query, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { formatDateTime } from "@/lib/utils";
 import { CheckCircle2, Clock, User, FileText, ChevronRight, MessageSquare } from "lucide-react";
 
 interface Submission {
@@ -26,7 +27,6 @@ export default function AdminSubmissionsPage() {
   const [isGrading, setIsGrading] = useState(false);
 
   const fetchSubmissions = async () => {
-    setLoading(true);
     try {
       // Fetch all tasks first to map titles
       const tasksSnap = await getDocs(collection(db, "tasks"));
@@ -53,7 +53,7 @@ export default function AdminSubmissionsPage() {
       }
       
       // Sort by submittedAt desc
-      allSubmissions.sort((a, b) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
+      allSubmissions.sort((a, b) => (b.submittedAt?.toMillis ? b.submittedAt.toMillis() : new Date(b.submittedAt || 0).getTime()) - (a.submittedAt?.toMillis ? a.submittedAt.toMillis() : new Date(a.submittedAt || 0).getTime()));
       setSubmissions(allSubmissions);
     } catch (err) {
       console.error(err);
@@ -72,7 +72,7 @@ export default function AdminSubmissionsPage() {
 
     setIsGrading(true);
     try {
-      const subRef = doc(db, "submissions", selectedSub.taskId, "entries", selectedSub.studentId);
+      const subRef = doc(db, "submissions", selectedSub.taskId, "entries", selectedSub.id);
       await updateDoc(subRef, {
         grade,
         feedback,
@@ -137,7 +137,7 @@ export default function AdminSubmissionsPage() {
               <p className="text-xs text-neutral-500 line-clamp-1 mb-2 italic">&quot;{sub.text}&quot;</p>
               <div className="flex items-center text-[10px] text-neutral-400">
                 <Clock size={12} className="mr-1" />
-                {sub.submittedAt?.toDate().toLocaleString()}
+                {formatDateTime(sub.submittedAt)}
               </div>
             </button>
           ))}
