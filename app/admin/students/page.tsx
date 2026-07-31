@@ -128,6 +128,35 @@ export default function StudentsPage() {
     }
   };
 
+  const loadAllStudents = async () => {
+    if (!user || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      let cursor = nextCursor;
+      while (cursor) {
+        const token = await user.getIdToken();
+        const url = new URL(window.location.origin + "/api/admin/students");
+        url.searchParams.set("limit", "100");
+        url.searchParams.set("cursor", String(cursor));
+        if (searchDebounced) url.searchParams.set("q", searchDebounced);
+        const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+        const data = await parseJsonResponse(res);
+        if (res.ok && data && Array.isArray(data.items)) {
+          setStudents(prev => [...prev, ...data.items]);
+          cursor = data.nextCursor ?? null;
+          setNextCursor(data.nextCursor ?? null);
+        } else {
+          setError(data.error || data.details || data._raw || `Unable to load students (${res.status})`);
+          break;
+        }
+      }
+    } catch (err: any) {
+      setError(`Unable to load students: ${err?.message || err}`);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   // infinite scroll sentinel
   useEffect(() => {
     const sentinel = document.getElementById("students-sentinel");
@@ -316,6 +345,15 @@ export default function StudentsPage() {
                   placeholder="Search students..."
                   className="block w-full pl-10 pr-3 py-1.5 text-sm border border-neutral-200 rounded-lg focus:ring-1 focus:ring-neutral-900"
                 />
+              </div>
+              <div className="ml-4">
+                <button
+                  onClick={loadAllStudents}
+                  disabled={isLoadingMore || loading}
+                  className="text-xs font-bold text-neutral-700 bg-neutral-100 px-3 py-1 rounded-lg hover:bg-neutral-200 disabled:opacity-50"
+                >
+                  {isLoadingMore ? "Loading..." : "Load all"}
+                </button>
               </div>
             </div>
             <div className="overflow-x-auto">

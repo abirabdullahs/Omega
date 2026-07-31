@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy, doc, updateDoc, addDoc, serverTimestamp, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, doc, updateDoc, addDoc, serverTimestamp, where, Timestamp, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { findChapterMeta, getChapterName } from "@/lib/subjects";
+import { findChapterMeta, getChapterName, SUBJECTS } from "@/lib/subjects";
 import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import { User, Calendar, Send, Info, X } from "lucide-react";
 
@@ -23,6 +23,7 @@ export default function AdminRequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
   const [deadlines, setDeadlines] = useState<Record<string, string>>({});
   const [isAssigning, setIsAssigning] = useState(false);
+  const [selectedPerSubject, setSelectedPerSubject] = useState<Record<string, string | null>>({});
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -51,57 +52,58 @@ export default function AdminRequestsPage() {
       initial[chapterId] = "";
     });
     setDeadlines(initial);
+    const perSub: Record<string, string | null> = {};
+    SUBJECTS.forEach((s) => { perSub[s.id] = null; });
+    setSelectedPerSubject(perSub);
   };
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRequest) return;
-
-    const chapterIds = selectedRequest.requestedChapters || [];
-    if (chapterIds.length === 0) {
-      alert("This request has no chapters to assign.");
-      return;
-    }
-
-    const missing = chapterIds.filter((id) => !deadlines[id]);
-    if (missing.length > 0) {
-      alert("Please set a deadline for every requested chapter.");
-      return;
-    }
-
     setIsAssigning(true);
     try {
-      // For per-subject assignment behavior: update existing running assignment for the user
-      // by replacing/adding only the specific subject items instead of completing the whole assignment.
+      // Build items from per-subject selections
+      const itemsToAssign: any[] = [];
+      for (const subject of SUBJECTS) {
+        const selectedChapter = selectedPerSubject[subject.id];
+        if (!selectedChapter) continue;
+        const dl = deadlines[selectedChapter];
+        if (!dl) {
+          alert(`Please set a deadline for the selected chapter in ${subject.name}.`);
+          setIsAssigning(false);
+          return;
+        }
+        itemsToAssign.push({
+          chapterId: selectedChapter,
+          subjectId: subject.id,
+          subjectName: subject.name,
+          deadline: Timestamp.fromDate(parseDateInputLocal(dl)),
+        });
+      }
+
+      if (itemsToAssign.length === 0) {
+        alert("Please select at least one chapter to assign.");
+        setIsAssigning(false);
+        return;
+      }
+
       const runningSnap = await getDocs(query(
         collection(db, "assignments"),
         where("userId", "==", selectedRequest.userId),
         where("status", "==", "running")
       ));
 
-      const newItems = chapterIds.map((chapterId) => {
-        const meta = findChapterMeta(chapterId);
-        return {
-          chapterId,
-          subjectId: meta?.subject.id || "unknown",
-          subjectName: meta?.subject.name || "Unknown",
-          deadline: Timestamp.fromDate(parseDateInputLocal(deadlines[chapterId])),
-        };
-      });
+      const newItems = itemsToAssign;
 
       if (!runningSnap.empty) {
-        // Merge into the first running assignment found (keep other items for other subjects)
         const aDoc = runningSnap.docs[0];
         const aData: any = aDoc.data();
         const existingItems: any[] = Array.isArray(aData.items) ? aData.items : [];
 
-        // Remove any existing items that are for the same subjects as newItems
-        const subjectsToReplace = new Set(newItems.map(i => i.subjectId));
+        const subjectsToReplace = new Set(newItems.map((i: any) => i.subjectId));
         const filtered = existingItems.filter(it => !subjectsToReplace.has(it.subjectId));
 
         const mergedItems = [...filtered, ...newItems];
-
-        // Compute latest deadline for assignment-level deadline field
         const latestDeadline = mergedItems.reduce((latest, item) => {
           const t = item.deadline.toMillis();
           return t > latest ? t : latest;
@@ -129,7 +131,10 @@ export default function AdminRequestsPage() {
         });
       }
 
-      await updateDoc(doc(db, "requests", selectedRequest.id), { status: "approved" });
+      // Remove assigned chapters from the request's requestedChapters
+      const assignedChapterIds = newItems.map((it) => it.chapterId);
+      const remaining = (selectedRequest.requestedChapters || []).filter((cid) => !assignedChapterIds.includes(cid));
+      await updateDoc(doc(db, "requests", selectedRequest.id), { requestedChapters: remaining, status: remaining.length === 0 ? "approved" : "partial", updatedAt: serverTimestamp() });
 
       setSelectedRequest(null);
       setReloadKey(k => k + 1);
