@@ -13,6 +13,9 @@ interface Student {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [searchDebounced, setSearchDebounced] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [phone, setPhone] = useState("");
@@ -45,22 +48,28 @@ export default function StudentsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    async function fetchStudents() {
+    async function fetchStudents(cursor: string | null = null, append = false) {
       if (!user) {
         if (isMounted) setLoading(false);
         return;
       }
       try {
         const token = await user.getIdToken();
-        const res = await fetch("/api/admin/students", {
+        const url = new URL(window.location.origin + "/api/admin/students");
+        url.searchParams.set("limit", "20");
+        if (cursor) url.searchParams.set("cursor", String(cursor));
+        if (searchDebounced) url.searchParams.set("q", searchDebounced);
+
+        const res = await fetch(url.toString(), {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await parseJsonResponse(res);
         if (isMounted) {
-          if (res.ok && Array.isArray(data)) {
-            setStudents(data);
+          if (res.ok && data && Array.isArray(data.items)) {
+            setStudents(prev => (append ? [...prev, ...data.items] : data.items));
+            setNextCursor(data.nextCursor ?? null);
           } else {
-            setStudents([]);
+            if (!append) setStudents([]);
             setError(data.error || data.details || data._raw || `Unable to load students (${res.status})`);
           }
         }
@@ -68,17 +77,71 @@ export default function StudentsPage() {
         console.error(err);
         if (isMounted) setError(`Unable to load students: ${err.message || err}`);
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     }
-    fetchStudents();
+    // initial load (or search)
+    setLoading(true);
+    setStudents([]);
+    setNextCursor(null);
+    fetchStudents(null, false);
     return () => { isMounted = false; };
-  }, [reloadKey, user]);
+  }, [reloadKey, user, searchDebounced]);
 
-  const filteredStudents = students.filter(s =>
-    (s.name?.toLowerCase().includes(search.toLowerCase())) ||
-    (s.phone?.includes(search))
-  );
+  // debounce search input
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const filteredStudents = searchDebounced
+    ? students
+    : students.filter(s =>
+        (s.name?.toLowerCase().includes(search.toLowerCase())) ||
+        (s.phone?.includes(search))
+      );
+
+  const loadMore = async () => {
+    if (!nextCursor || !user || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const token = await user.getIdToken();
+      const url = new URL(window.location.origin + "/api/admin/students");
+      url.searchParams.set("limit", "20");
+      url.searchParams.set("cursor", String(nextCursor));
+      if (searchDebounced) url.searchParams.set("q", searchDebounced);
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      const data = await parseJsonResponse(res);
+      if (res.ok && data && Array.isArray(data.items)) {
+        setStudents(prev => [...prev, ...data.items]);
+        setNextCursor(data.nextCursor ?? null);
+      } else {
+        setError(data.error || data.details || data._raw || `Unable to load students (${res.status})`);
+      }
+    } catch (err: any) {
+      setError(`Unable to load more students: ${err.message || err}`);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // infinite scroll sentinel
+  useEffect(() => {
+    const sentinel = document.getElementById("students-sentinel");
+    if (!sentinel) return;
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && nextCursor && !isLoadingMore && !loading) {
+          loadMore();
+        }
+      }
+    }, { root: null, rootMargin: "200px", threshold: 0.1 });
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [nextCursor, isLoadingMore, loading, searchDebounced]);
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,6 +369,15 @@ export default function StudentsPage() {
                   ))}
                 </tbody>
               </table>
+              <div className="p-4 flex flex-col items-center">
+                {loading ? null : (
+                  <>
+                    {isLoadingMore && <div className="text-sm text-neutral-500 mb-2">Loading...</div>}
+                    <div id="students-sentinel" className="w-full h-2" />
+                    {!nextCursor && !isLoadingMore && <span className="text-xs text-neutral-400 mt-2">No more students</span>}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -124,28 +124,54 @@ export async function GET(req: NextRequest) {
     const limitParam = parseInt(searchParams.get("limit") || "20", 10);
     const limit = Number.isNaN(limitParam) ? 20 : Math.max(1, Math.min(100, limitParam));
     const cursorParam = searchParams.get("cursor");
+    const qParam = (searchParams.get("q") || "").trim();
 
-    // Build query with cursor-based pagination using createdAt field
-    let q: any = db.collection("users").where("role", "==", "student").orderBy("createdAt", "desc");
-    if (cursorParam) {
-      const cursorNum = parseInt(cursorParam, 10);
+    // If qParam provided, perform prefix search on name (or phone if numeric).
+    if (qParam) {
+      const isPhoneSearch = /^\d+$/.test(qParam);
+      const field = isPhoneSearch ? "phone" : "name";
+      // Range for prefix search
+      const start = qParam;
+      const end = qParam + "\uf8ff";
+
+      let qQuery: any = db.collection("users").where("role", "==", "student").where(field, ">=", start).where(field, "<=", end).orderBy(field, "asc");
+      if (cursorParam) {
+        // cursor for search is the last seen field value
+        qQuery = qQuery.startAfter(cursorParam);
+      }
+      qQuery = qQuery.limit(limit + 1);
+      const studentsSnapshot = await qQuery.get();
+      const docs = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+      let nextCursor: string | null = null;
+      if (docs.length > limit) {
+        const last = docs[limit - 1];
+        nextCursor = last?.[field] || null;
+      }
+      const pageItems = docs.slice(0, limit);
+      return NextResponse.json({ items: pageItems, nextCursor });
+    }
+
+    // Default: paginate by createdAt (desc)
+    {
+      const cursorNum = cursorParam ? parseInt(cursorParam, 10) : NaN;
+      let q: any = db.collection("users").where("role", "==", "student").orderBy("createdAt", "desc");
       if (!Number.isNaN(cursorNum)) {
         q = q.startAfter(cursorNum);
       }
+      q = q.limit(limit + 1); // fetch one extra to determine nextCursor
+      const studentsSnapshot = await q.get();
+      const docs = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+      let nextCursor: string | null = null;
+      if (docs.length > limit) {
+        const last = docs[limit - 1];
+        nextCursor = String(last?.createdAt || null);
+      }
+
+      const pageItems = docs.slice(0, limit);
+      return NextResponse.json({ items: pageItems, nextCursor });
     }
-
-    q = q.limit(limit + 1); // fetch one extra to determine nextCursor
-    const studentsSnapshot = await q.get();
-    const docs = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-
-    let nextCursor: number | null = null;
-    if (docs.length > limit) {
-      const last = docs[limit - 1];
-      nextCursor = last?.createdAt || null;
-    }
-
-    const pageItems = docs.slice(0, limit);
-    return NextResponse.json({ items: pageItems, nextCursor });
   } catch (error: any) {
     console.error("Error listing students:", error);
     const initError = getAdminInitError();

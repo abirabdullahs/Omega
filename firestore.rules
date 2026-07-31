@@ -68,10 +68,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Ephemeral chat — client read only; writes via Admin SDK / Socket server
+    // Ephemeral chat — allow students to create their own messages and admins to create messages;
+    // only admins may update or delete messages.
     match /chats/{studentId}/messages/{messageId} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == studentId);
-      allow write: if false;
+      allow create: if (
+        // Admins can create messages
+        (isAdmin() && request.resource.data.senderId == request.auth.uid)
+        ||
+        // Students can create messages only in their own chat and must set senderId to their uid
+        (isStudent() && request.auth.uid == studentId && request.resource.data.senderId == request.auth.uid)
+      );
+      allow update, delete: if isAdmin();
     }
   }
 }

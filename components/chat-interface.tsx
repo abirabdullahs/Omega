@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import { collection, query, orderBy, getDocs, where, onSnapshot, addDoc } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Send, User, Shield, Clock, MessageSquare } from "lucide-react";
 
@@ -26,6 +26,7 @@ interface ChatInterfaceProps {
 export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -82,25 +83,33 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
     }
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
+    setSendError(null);
+    const uid = auth?.currentUser?.uid;
+    if (!uid) {
+      setSendError("Not authenticated");
+      return;
+    }
+
     const messageData = {
-      senderId: currentUser.uid,
+      senderId: uid,
       senderName: currentUser.name,
       text: input.trim(),
       role: currentUser.role,
-      createdAt: new Date(),
-    } as Message;
+      createdAt: serverTimestamp(),
+    } as any;
 
     // Persist to Firestore; realtime listener will pick it up
     try {
       const messagesRef = collection(db, "chats", roomId, "messages");
-      addDoc(messagesRef, messageData);
-    } catch (err) {
+        await addDoc(messagesRef, messageData);
+        setInput("");
+    } catch (err: any) {
       console.error("Error sending message:", err);
+      setSendError(err?.message || String(err));
     }
-    setInput("");
   };
 
   return (
@@ -166,6 +175,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
             <Send size={16} />
           </button>
         </div>
+        {sendError && <div className="mt-2 text-xs text-red-600">{sendError}</div>}
       </div>
     </div>
   );

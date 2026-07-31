@@ -71,16 +71,15 @@ export default function AdminRequestsPage() {
 
     setIsAssigning(true);
     try {
-      const oldSnap = await getDocs(query(
+      // For per-subject assignment behavior: update existing running assignment for the user
+      // by replacing/adding only the specific subject items instead of completing the whole assignment.
+      const runningSnap = await getDocs(query(
         collection(db, "assignments"),
         where("userId", "==", selectedRequest.userId),
         where("status", "==", "running")
       ));
-      for (const d of oldSnap.docs) {
-        await updateDoc(doc(db, "assignments", d.id), { status: "completed" });
-      }
 
-      const items = chapterIds.map((chapterId) => {
+      const newItems = chapterIds.map((chapterId) => {
         const meta = findChapterMeta(chapterId);
         return {
           chapterId,
@@ -90,20 +89,45 @@ export default function AdminRequestsPage() {
         };
       });
 
-      const latestDeadline = items.reduce((latest, item) => {
-        const t = item.deadline.toMillis();
-        return t > latest ? t : latest;
-      }, 0);
+      if (!runningSnap.empty) {
+        // Merge into the first running assignment found (keep other items for other subjects)
+        const aDoc = runningSnap.docs[0];
+        const aData: any = aDoc.data();
+        const existingItems: any[] = Array.isArray(aData.items) ? aData.items : [];
 
-      await addDoc(collection(db, "assignments"), {
-        userId: selectedRequest.userId,
-        items,
-        // Legacy-compatible map (subjectId -> chapterId) for older readers
-        chapters: Object.fromEntries(items.map((item) => [item.subjectId, item.chapterId])),
-        deadline: Timestamp.fromMillis(latestDeadline),
-        status: "running",
-        createdAt: serverTimestamp(),
-      });
+        // Remove any existing items that are for the same subjects as newItems
+        const subjectsToReplace = new Set(newItems.map(i => i.subjectId));
+        const filtered = existingItems.filter(it => !subjectsToReplace.has(it.subjectId));
+
+        const mergedItems = [...filtered, ...newItems];
+
+        // Compute latest deadline for assignment-level deadline field
+        const latestDeadline = mergedItems.reduce((latest, item) => {
+          const t = item.deadline.toMillis();
+          return t > latest ? t : latest;
+        }, 0);
+
+        await updateDoc(doc(db, "assignments", aDoc.id), {
+          items: mergedItems,
+          chapters: Object.fromEntries(mergedItems.map((item) => [item.subjectId, item.chapterId])),
+          deadline: Timestamp.fromMillis(latestDeadline),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        const latestDeadline = newItems.reduce((latest, item) => {
+          const t = item.deadline.toMillis();
+          return t > latest ? t : latest;
+        }, 0);
+
+        await addDoc(collection(db, "assignments"), {
+          userId: selectedRequest.userId,
+          items: newItems,
+          chapters: Object.fromEntries(newItems.map((item) => [item.subjectId, item.chapterId])),
+          deadline: Timestamp.fromMillis(latestDeadline),
+          status: "running",
+          createdAt: serverTimestamp(),
+        });
+      }
 
       await updateDoc(doc(db, "requests", selectedRequest.id), { status: "approved" });
 
