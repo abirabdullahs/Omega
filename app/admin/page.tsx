@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { Users, BookOpen, MessageSquare, Bell } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -13,23 +12,28 @@ export default function AdminDashboard() {
     submissions: 0,
     notices: 0,
   });
+  const { user } = useAuth();
 
   useEffect(() => {
+    let mounted = true;
     async function fetchStats() {
-      // For a real app, use count() queries
-      const studentsSnap = await getDocs(query(collection(db, "users"), limit(100)));
-      const tasksSnap = await getDocs(collection(db, "tasks"));
-      const noticesSnap = await getDocs(collection(db, "notices"));
-      
-      setStats({
-        students: studentsSnap.docs.filter(d => d.data().role === "student").length,
-        tasks: tasksSnap.size,
-        submissions: 0, // Harder to count across subcollections without aggregate
-        notices: noticesSnap.size,
-      });
+      // Use server-side admin API to avoid Firestore rules issues from the client.
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const url = new URL(window.location.origin + "/api/admin/students");
+        url.searchParams.set("limit", "100");
+        const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json().catch(() => null);
+        const studentsCount = Array.isArray(data?.items) ? data.items.filter((d: any) => d.role === "student").length : 0;
+        if (mounted) setStats({ students: studentsCount, tasks: 0, submissions: 0, notices: 0 });
+      } catch (err) {
+        console.error("Error fetching stats:", err);
+      }
     }
     fetchStats();
-  }, []);
+    return () => { mounted = false; };
+  }, [user?.uid]);
 
   const cards = [
     { label: "Total Students", value: stats.students, icon: Users, color: "bg-blue-50 text-blue-600" },
