@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy, doc, updateDoc, addDoc, serverTimestamp, where, Timestamp, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/auth-provider";
 import { findChapterMeta, getChapterName, SUBJECTS } from "@/lib/subjects";
 import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import { User, Calendar, Send, Info, X } from "lucide-react";
@@ -25,15 +24,20 @@ export default function AdminRequestsPage() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedPerSubject, setSelectedPerSubject] = useState<Record<string, string | null>>({});
   const [reloadKey, setReloadKey] = useState(0);
+  const { user } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
     async function fetchRequests() {
       try {
-        const q = query(collection(db, "requests"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
-        const snap = await getDocs(q);
-        if (isMounted) {
-          setRequests(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Request)));
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch(`${window.location.origin}/api/admin/requests`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.items)) {
+          if (isMounted) setRequests(data.items.map((i: any) => ({ id: i.id, ...i } as Request)));
+        } else {
+          console.error('Admin requests API error:', data);
         }
       } catch (err) {
         console.error(err);
@@ -43,7 +47,7 @@ export default function AdminRequestsPage() {
     }
     fetchRequests();
     return () => { isMounted = false; };
-  }, [reloadKey]);
+  }, [reloadKey, user?.uid]);
 
   const handleSelectRequest = (req: Request) => {
     setSelectedRequest(req);
@@ -59,7 +63,7 @@ export default function AdminRequestsPage() {
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRequest) return;
+    if (!selectedRequest || !user) return;
     setIsAssigning(true);
     try {
       // Build items from per-subject selections
@@ -77,7 +81,7 @@ export default function AdminRequestsPage() {
           chapterId: selectedChapter,
           subjectId: subject.id,
           subjectName: subject.name,
-          deadline: Timestamp.fromDate(parseDateInputLocal(dl)),
+          deadlineMillis: parseDateInputLocal(dl).getTime(),
         });
       }
 
@@ -87,58 +91,21 @@ export default function AdminRequestsPage() {
         return;
       }
 
-      const runningSnap = await getDocs(query(
-        collection(db, "assignments"),
-        where("userId", "==", selectedRequest.userId),
-        where("status", "==", "running")
-      ));
-
-      const newItems = itemsToAssign;
-
-      if (!runningSnap.empty) {
-        const aDoc = runningSnap.docs[0];
-        const aData: any = aDoc.data();
-        const existingItems: any[] = Array.isArray(aData.items) ? aData.items : [];
-
-        const subjectsToReplace = new Set(newItems.map((i: any) => i.subjectId));
-        const filtered = existingItems.filter(it => !subjectsToReplace.has(it.subjectId));
-
-        const mergedItems = [...filtered, ...newItems];
-        const latestDeadline = mergedItems.reduce((latest, item) => {
-          const t = item.deadline.toMillis();
-          return t > latest ? t : latest;
-        }, 0);
-
-        await updateDoc(doc(db, "assignments", aDoc.id), {
-          items: mergedItems,
-          chapters: Object.fromEntries(mergedItems.map((item) => [item.subjectId, item.chapterId])),
-          deadline: Timestamp.fromMillis(latestDeadline),
-          updatedAt: serverTimestamp(),
-        });
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requestId: selectedRequest.id, items: itemsToAssign }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setSelectedRequest(null);
+        setReloadKey(k => k + 1);
+        alert("Chapters assigned successfully!");
       } else {
-        const latestDeadline = newItems.reduce((latest, item) => {
-          const t = item.deadline.toMillis();
-          return t > latest ? t : latest;
-        }, 0);
-
-        await addDoc(collection(db, "assignments"), {
-          userId: selectedRequest.userId,
-          items: newItems,
-          chapters: Object.fromEntries(newItems.map((item) => [item.subjectId, item.chapterId])),
-          deadline: Timestamp.fromMillis(latestDeadline),
-          status: "running",
-          createdAt: serverTimestamp(),
-        });
+        console.error('Admin assign error:', data);
+        alert(data?.error || "Failed to assign chapters.");
       }
-
-      // Remove assigned chapters from the request's requestedChapters
-      const assignedChapterIds = newItems.map((it) => it.chapterId);
-      const remaining = (selectedRequest.requestedChapters || []).filter((cid) => !assignedChapterIds.includes(cid));
-      await updateDoc(doc(db, "requests", selectedRequest.id), { requestedChapters: remaining, status: remaining.length === 0 ? "approved" : "partial", updatedAt: serverTimestamp() });
-
-      setSelectedRequest(null);
-      setReloadKey(k => k + 1);
-      alert("Chapters assigned successfully!");
     } catch (err) {
       console.error(err);
       alert("Failed to assign chapters.");

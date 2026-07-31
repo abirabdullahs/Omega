@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
 import ChatInterface from "@/components/chat-interface";
-import { Search, User, MessageCircle } from "lucide-react";
+import { Search, User, MessageCircle, ArrowLeft } from "lucide-react";
 
 interface Student {
   id: string;
@@ -46,22 +46,22 @@ export default function AdminChatDashboard() {
   if (!user || !userData) return null;
 
   return (
-    <div className="h-[calc(100vh-12rem)] flex flex-col space-y-6">
+    <div className="h-[calc(100vh-12rem)] flex flex-col space-y-4 md:space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-neutral-900">Live Support</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-neutral-900">Live Support</h2>
         <p className="text-neutral-500 text-sm">Chat in real-time with students.</p>
       </div>
 
-      <div className="flex-1 flex gap-8 min-h-0">
-        {/* Sidebar: Student List */}
-        <div className={`flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all ${sidebarOpen ? 'w-96' : 'w-14'}`}>
+      <div className="flex-1 flex gap-4 md:gap-8 min-h-0">
+        {/* Sidebar: Student List — full-width on mobile, hidden once a student is picked so the chat can take over the screen */}
+        <div className={`${selectedStudent ? 'hidden md:flex' : 'flex'} flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all ${sidebarOpen ? 'w-full md:w-96' : 'w-14'}`}>
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/30">
             <div className="relative flex items-center">
-              <button onClick={() => setSidebarOpen(open => !open)} className="p-2 rounded-md hover:bg-neutral-100">
+              <button onClick={() => setSidebarOpen(open => !open)} className="p-2 rounded-md hover:bg-neutral-100 shrink-0">
                 <svg className="w-5 h-5 text-neutral-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               {sidebarOpen && (
-                <div className="flex-1 ml-2">
+                <div className="flex-1 ml-2 min-w-0">
                   <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                     <input
@@ -101,11 +101,18 @@ export default function AdminChatDashboard() {
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className={`flex-1 min-h-0 ${sidebarOpen ? '' : 'pl-2'}`}>
+        {/* Chat Area — hidden on mobile until a student is selected, then takes the full screen */}
+        <div className={`flex-1 min-h-0 ${selectedStudent ? 'block' : 'hidden md:block'} ${sidebarOpen ? '' : 'pl-2'}`}>
           {selectedStudent ? (
             <div className="h-full flex flex-col">
-              <div className="flex-1">
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="md:hidden flex items-center gap-2 px-4 py-3 mb-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 bg-white rounded-2xl border border-neutral-100 shadow-sm shrink-0"
+              >
+                <ArrowLeft size={16} />
+                Back to students
+              </button>
+              <div className="flex-1 min-h-0">
                 <ChatInterface 
                   roomId={selectedStudent.id} 
                   currentUser={{
