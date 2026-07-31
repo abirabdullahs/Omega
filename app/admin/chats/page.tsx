@@ -48,7 +48,7 @@ export default function AdminChatDashboard() {
 
       <div className="flex-1 flex gap-8 min-h-0">
         {/* Sidebar: Student List */}
-        <div className="w-80 flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+        <div className="w-96 flex flex-col bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/30">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
@@ -77,7 +77,7 @@ export default function AdminChatDashboard() {
                     {s.name ? s.name[0] : "S"}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-neutral-900 truncate">{s.name || "Unnamed"}</p>
+                    <p className="text-sm font-bold text-neutral-900 break-words">{s.name || "Unnamed"}</p>
                     <p className="text-[10px] text-neutral-400 font-medium">{s.phone}</p>
                   </div>
                 </button>

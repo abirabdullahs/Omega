@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
-import { collection, query, orderBy, getDocs, where } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, onSnapshot, addDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Send, User, Shield, Clock, MessageSquare } from "lucide-react";
 
@@ -27,7 +26,7 @@ interface ChatInterfaceProps {
 export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,35 +53,26 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
 
     fetchMessages();
 
-    const connectSocket = async () => {
-      if (!auth?.currentUser) return;
-      const token = await auth.currentUser.getIdToken();
-      if (cancelled) return;
-
-      const newSocket = io({
-        auth: { token },
+    // Use Firestore realtime listener for messages instead of Socket.IO
+    let unsubscribe: (() => void) | null = null;
+    try {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const messagesRef = collection(db, "chats", roomId, "messages");
+      const q = query(messagesRef, where("createdAt", ">=", tenMinutesAgo), orderBy("createdAt", "asc"));
+      unsubscribe = onSnapshot(q, (snap) => {
+        if (cancelled) return;
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
+        setMessages(items);
+      }, (err) => {
+        console.error("Realtime listener error:", err);
       });
-      socketRef.current = newSocket;
-
-      newSocket.on("connect", () => {
-        newSocket.emit("join", roomId);
-      });
-
-      newSocket.on("receive_message", (msg: Message) => {
-        setMessages(prev => [...prev, msg]);
-      });
-
-      newSocket.on("connect_error", (err) => {
-        console.error("Socket connection error:", err.message);
-      });
-    };
-
-    connectSocket();
+    } catch (err) {
+      console.error("Error setting up realtime listener:", err);
+    }
 
     return () => {
       cancelled = true;
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      if (unsubscribe) unsubscribe();
     };
   }, [roomId]);
 
@@ -93,12 +83,23 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim() || !socketRef.current) return;
+    if (!input.trim()) return;
 
-    socketRef.current.emit("send_message", {
-      roomId,
+    const messageData = {
+      senderId: currentUser.uid,
+      senderName: currentUser.name,
       text: input.trim(),
-    });
+      role: currentUser.role,
+      createdAt: new Date(),
+    } as Message;
+
+    // Persist to Firestore; realtime listener will pick it up
+    try {
+      const messagesRef = collection(db, "chats", roomId, "messages");
+      addDoc(messagesRef, messageData);
+    } catch (err) {
+      console.error("Error sending message:", err);
+    }
     setInput("");
   };
 

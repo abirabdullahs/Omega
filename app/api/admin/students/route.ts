@@ -29,10 +29,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid students data" }, { status: 400 });
     }
 
-    const results: { phone: string; success: boolean; error?: string }[] = [];
+    const results: { phone: string; success: boolean; skipped?: boolean; error?: string }[] = [];
     for (const student of students) {
       const { phone, name } = student;
       if (!phone) continue;
+
+      // Check if a user doc with this phone already exists
+      try {
+        const existingSnap = await db.collection("users").where("phone", "==", phone).limit(1).get();
+        if (!existingSnap.empty) {
+          // Already exists — skip creating
+          results.push({ phone, success: false, skipped: true, error: "Already exists" });
+          continue;
+        }
+      } catch (err: any) {
+        // If query failed, report and skip
+        results.push({ phone, success: false, error: `Lookup failed: ${err?.message || err}` });
+        continue;
+      }
 
       const email = formatPhoneToEmail(phone);
       let password: string;
@@ -50,11 +64,13 @@ export async function POST(req: NextRequest) {
           displayName: name || `Student ${String(phone).replace(/\D/g, "").slice(-4)}`,
         });
 
+        // Store createdAt as a numeric timestamp to support cursor pagination
         await db.collection("users").doc(userRecord.uid).set({
           phone,
           name: name || "",
           role: "student",
           passwordChanged: false,
+          createdAt: Date.now(),
         });
 
         results.push({ phone, success: true });
@@ -104,9 +120,32 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    const studentsSnapshot = await db.collection("users").where("role", "==", "student").get();
-    const students = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-    return NextResponse.json(students);
+    const { searchParams } = new URL(req.url);
+    const limitParam = parseInt(searchParams.get("limit") || "20", 10);
+    const limit = Number.isNaN(limitParam) ? 20 : Math.max(1, Math.min(100, limitParam));
+    const cursorParam = searchParams.get("cursor");
+
+    // Build query with cursor-based pagination using createdAt field
+    let q: any = db.collection("users").where("role", "==", "student").orderBy("createdAt", "desc");
+    if (cursorParam) {
+      const cursorNum = parseInt(cursorParam, 10);
+      if (!Number.isNaN(cursorNum)) {
+        q = q.startAfter(cursorNum);
+      }
+    }
+
+    q = q.limit(limit + 1); // fetch one extra to determine nextCursor
+    const studentsSnapshot = await q.get();
+    const docs = studentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+    let nextCursor: number | null = null;
+    if (docs.length > limit) {
+      const last = docs[limit - 1];
+      nextCursor = last?.createdAt || null;
+    }
+
+    const pageItems = docs.slice(0, limit);
+    return NextResponse.json({ items: pageItems, nextCursor });
   } catch (error: any) {
     console.error("Error listing students:", error);
     const initError = getAdminInitError();
