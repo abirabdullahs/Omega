@@ -36,10 +36,13 @@ function parseServiceAccountValue(raw: string) {
     }
   }
 
+  const trimmedValue = value.trim();
+
   // Support base64-encoded service account JSON (recommended for Vercel).
-  if (!value.trim().startsWith("{")) {
+  if (!trimmedValue.startsWith("{")) {
     try {
-      const decoded = Buffer.from(value, "base64").toString("utf8");
+      const normalizedBase64 = trimmedValue.replace(/\s+/g, "");
+      const decoded = Buffer.from(normalizedBase64, "base64").toString("utf8");
       if (decoded.trim().startsWith("{")) {
         value = decoded;
       }
@@ -78,6 +81,11 @@ function getServiceAccountFromEnv() {
     process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
     process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
     process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    process.env.SERVICE_ACCOUNT_JSON,
+    process.env.SERVICE_ACCOUNT_KEY,
+    process.env.SERVICE_ACCOUNT,
+    process.env.GOOGLE_CREDENTIALS_JSON,
+    process.env.GOOGLE_CREDENTIALS,
   ];
 
   for (const value of candidates) {
@@ -109,7 +117,12 @@ function getServiceAccountFromEnv() {
 
 function getServiceAccountPath() {
   try {
-    const explicitPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const explicitPath =
+      process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+      process.env.FIREBASE_SERVICE_ACCOUNT_FILE ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS_PATH;
+
     if (explicitPath) {
       const resolvedPath = path.isAbsolute(explicitPath)
         ? explicitPath

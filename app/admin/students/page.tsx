@@ -91,18 +91,18 @@ export default function StudentsPage() {
         headers: await getAuthHeaders(),
         body: JSON.stringify({ students: [{ phone, name }] }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       const first = data.results?.[0];
       if (res.ok && data.success && first?.success) {
         setSuccess(`Student added successfully!`);
         setPhone("");
         setName("");
-        setReloadKey(k => k + 1);
+        setReloadKey((k) => k + 1);
       } else {
-        setError(first?.error || data.error || "Failed to add student");
+        setError(first?.error || data.error || data.details || data._raw || "Failed to add student");
       }
-    } catch (err) {
-      setError("Failed to add student");
+    } catch (err: any) {
+      setError(`Failed to add student: ${err?.message || err}`);
     } finally {
       setIsAdding(false);
     }
@@ -114,11 +114,13 @@ export default function StudentsPage() {
     setSuccess("");
     setIsAdding(true);
 
-    const lines = bulkText.split("\n").filter(l => l.trim());
-    const studentList = lines.map(line => {
-      const [p, n] = line.split(",").map(s => s.trim());
-      return { phone: p, name: n };
-    }).filter(s => s.phone);
+    const lines = bulkText.split("\n").filter((l) => l.trim());
+    const studentList = lines
+      .map((line) => {
+        const [p, n] = line.split(",").map((s) => s.trim());
+        return { phone: p, name: n };
+      })
+      .filter((s) => s.phone);
 
     try {
       const res = await fetch("/api/admin/students", {
@@ -126,7 +128,7 @@ export default function StudentsPage() {
         headers: await getAuthHeaders(),
         body: JSON.stringify({ students: studentList }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (res.ok && data.success) {
         const successes = data.results?.filter((r: any) => r.success).length ?? 0;
         const failures = data.failureCount ?? 0;
@@ -136,12 +138,12 @@ export default function StudentsPage() {
             : `${successes} students added successfully!`
         );
         setBulkText("");
-        setReloadKey(k => k + 1);
+        setReloadKey((k) => k + 1);
       } else {
-        setError(data.error || "Failed to add students");
+        setError(data.error || data.details || data._raw || "Failed to add students");
       }
-    } catch (err) {
-      setError("Failed to add students");
+    } catch (err: any) {
+      setError(`Failed to add students: ${err?.message || err}`);
     } finally {
       setIsAdding(false);
     }

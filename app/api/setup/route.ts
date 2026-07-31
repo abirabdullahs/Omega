@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, db, adminInitError } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 import { formatPhoneToEmail } from "@/lib/auth-utils";
 
 export async function GET(req: NextRequest) {
@@ -20,11 +20,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid or missing setup secret" }, { status: 403 });
     }
 
+    const auth = getAdminAuth();
+    const db = getAdminDb();
+
     if (!auth || !db) {
       return NextResponse.json(
         {
           error: "Firebase Admin setup is incomplete.",
-          details: adminInitError || "Check Firebase credentials and try again.",
+          details: getAdminInitError() || "Check Firebase credentials and try again.",
         },
         { status: 500 }
       );
