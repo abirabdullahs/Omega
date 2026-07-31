@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, query, orderBy, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/auth-provider";
 import { formatDateTime } from "@/lib/utils";
 import { CheckCircle2, Clock, User, FileText, ChevronRight, MessageSquare } from "lucide-react";
 
@@ -26,35 +25,19 @@ export default function AdminSubmissionsPage() {
   const [feedback, setFeedback] = useState("");
   const [isGrading, setIsGrading] = useState(false);
 
+  const { user } = useAuth();
+
   const fetchSubmissions = async () => {
     try {
-      // Fetch all tasks first to map titles
-      const tasksSnap = await getDocs(collection(db, "tasks"));
-      const taskMap = Object.fromEntries(tasksSnap.docs.map(d => [d.id, d.data().title]));
-
-      // Fetch all students to map names
-      const studentsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-      const studentMap = Object.fromEntries(studentsSnap.docs.map(d => [d.id, d.data().name || d.data().phone]));
-
-      // Fetch submissions
-      const allSubmissions: any[] = [];
-      for (const taskId of Object.keys(taskMap)) {
-        const entriesSnap = await getDocs(collection(db, "submissions", taskId, "entries"));
-        entriesSnap.forEach((doc: any) => {
-          const data = doc.data();
-          allSubmissions.push({
-            id: doc.id,
-            taskId,
-            taskTitle: taskMap[taskId],
-            studentName: studentMap[data.studentId],
-            ...data,
-          });
-        });
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/submissions`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(data?.items)) {
+        setSubmissions(data.items);
+      } else {
+        console.error('Submissions API error:', data);
       }
-      
-      // Sort by submittedAt desc
-      allSubmissions.sort((a, b) => (b.submittedAt?.toMillis ? b.submittedAt.toMillis() : new Date(b.submittedAt || 0).getTime()) - (a.submittedAt?.toMillis ? a.submittedAt.toMillis() : new Date(a.submittedAt || 0).getTime()));
-      setSubmissions(allSubmissions);
     } catch (err) {
       console.error(err);
     } finally {
@@ -64,7 +47,7 @@ export default function AdminSubmissionsPage() {
 
   useEffect(() => {
     fetchSubmissions();
-  }, []);
+  }, [user?.uid]);
 
   const handleGrade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,15 +55,22 @@ export default function AdminSubmissionsPage() {
 
     setIsGrading(true);
     try {
-      const subRef = doc(db, "submissions", selectedSub.taskId, "entries", selectedSub.id);
-      await updateDoc(subRef, {
-        grade,
-        feedback,
+      // Use admin API for grading (PATCH or POST) would be better, but for now use Admin submissions endpoint via fetch.
+      const token = await user?.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/submissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ taskId: selectedSub.taskId, entryId: selectedSub.id, grade, feedback }),
       });
-      setSelectedSub(null);
-      setGrade("");
-      setFeedback("");
-      fetchSubmissions();
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setSelectedSub(null);
+        setGrade("");
+        setFeedback("");
+        fetchSubmissions();
+      } else {
+        console.error('Grading API error:', data);
+      }
     } catch (err) {
       console.error(err);
     } finally {

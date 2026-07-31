@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import ChatInterface from "@/components/chat-interface";
 import { Search, User, MessageCircle } from "lucide-react";
@@ -18,19 +16,26 @@ export default function AdminChatDashboard() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [search, setSearch] = useState("");
   const { user, userData } = useAuth();
-
   useEffect(() => {
     const fetchStudents = async () => {
+      if (!user) return;
       try {
-        const q = query(collection(db, "users"), where("role", "==", "student"));
-        const snap = await getDocs(q);
-        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+        const token = await user.getIdToken();
+        const url = new URL(window.location.origin + "/api/admin/students");
+        url.searchParams.set("limit", "100");
+        const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.items)) {
+          setStudents(data.items.map((i: any) => ({ id: i.id, name: i.name || null, phone: i.phone || null })));
+        } else {
+          console.error('Students API error:', data);
+        }
       } catch (err) {
         console.error("Error fetching students:", err);
       }
     };
     fetchStudents();
-  }, []);
+  }, [user?.uid]);
 
   const filteredStudents = students.filter(s => 
     (s.name?.toLowerCase().includes(search.toLowerCase())) || 

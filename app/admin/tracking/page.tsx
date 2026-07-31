@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import { Clock, AlertCircle, Trash2, ShieldAlert } from "lucide-react";
 
@@ -33,52 +31,15 @@ export default function TrackingPage() {
 
   const fetchPerformanceData = async () => {
     try {
-      // 1. Get all students
-      const studentSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-      const students = studentSnap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-
-      // 2. Get all tasks with deadlines
-      const taskSnap = await getDocs(query(collection(db, "tasks"), orderBy("createdAt", "desc")));
-      const tasksWithDeadlines = taskSnap.docs
-        .map(d => ({ id: d.id, ...d.data() } as Task))
-        .filter(t => t.deadline);
-
-      const results: DefaulterInfo[] = [];
-
-      // 3. For each student, check their submissions against deadlines
-      for (const student of students) {
-        const missed: string[] = [];
-        const late: string[] = [];
-
-        for (const task of tasksWithDeadlines) {
-          const subRef = doc(db, "submissions", task.id, "entries", student.id);
-          const subSnap = await getDoc(subRef);
-
-          const deadlineDate = typeof task.deadline?.toDate === "function" ? task.deadline.toDate() : new Date(task.deadline);
-          if (Number.isNaN(deadlineDate.getTime())) continue;
-
-          const now = new Date();
-
-          if (!subSnap.exists()) {
-            if (now > deadlineDate) {
-              missed.push(task.title);
-            }
-          } else {
-            const submissionData = subSnap.data();
-            const rawSub = submissionData.submittedAt;
-            const submittedAt = typeof rawSub?.toDate === "function" ? rawSub.toDate() : rawSub ? new Date(rawSub) : null;
-            if (submittedAt && !Number.isNaN(submittedAt.getTime()) && submittedAt > deadlineDate) {
-              late.push(task.title);
-            }
-          }
-        }
-
-        if (missed.length > 0 || late.length > 0) {
-          results.push({ student, missedTasks: missed, lateTasks: late });
-        }
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(`${window.location.origin}/api/admin/tracking`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(data?.items)) {
+        setDefaulters(data.items.map((i: any) => ({ student: i.student, missedTasks: i.missedTasks, lateTasks: i.lateTasks })));
+      } else {
+        console.error('Tracking API error:', data);
       }
-
-      setDefaulters(results);
     } catch (err) {
       console.error(err);
     } finally {
@@ -88,7 +49,7 @@ export default function TrackingPage() {
 
   useEffect(() => {
     fetchPerformanceData();
-  }, []);
+  }, [user?.uid]);
 
   const handleRemoveStudent = async (studentId: string) => {
     if (!confirm("Are you sure you want to remove this student from the programme? This action is permanent.")) return;
