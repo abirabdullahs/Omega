@@ -74,6 +74,34 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   }, [roomId]);
 
   useEffect(() => {
+    if (!roomId) return;
+
+    const markRead = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+
+        const endpoint = currentUser.role === 'admin'
+          ? `/api/admin/chats/mark-read`
+          : `/api/chats/mark-read`;
+
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ roomId }),
+        });
+      } catch (err) {
+        console.warn('Unable to mark chat read:', err);
+      }
+    };
+
+    markRead();
+  }, [roomId, currentUser.role]);
+
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }

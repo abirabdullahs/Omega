@@ -96,6 +96,22 @@ app.prepare().then(() => {
       try {
         const docRef = await db.collection("chats").doc(roomId).collection("messages").add(messageData);
         io.to(roomId).emit("receive_message", { id: docRef.id, ...messageData });
+
+        try {
+          await db.collection("chats_meta").doc(roomId).set(
+            {
+              studentId: roomId,
+              lastMessageAt: new Date(),
+              lastMessageText: text,
+              unreadForAdmin: role === "student",
+              unreadForStudent: role === "admin",
+              updatedAt: new Date(),
+            },
+            { merge: true }
+          );
+        } catch (metaError) {
+          console.error("Error updating chat meta:", metaError);
+        }
       } catch (error) {
         console.error("Error saving message:", error);
       }

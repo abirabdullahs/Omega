@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
 import ChatInterface from "@/components/chat-interface";
-import { Search, User, MessageCircle, ArrowLeft } from "lucide-react";
+import { Search, MessageCircle, ArrowLeft } from "lucide-react";
 
 interface Student {
   id: string;
@@ -11,35 +11,69 @@ interface Student {
   phone: string;
 }
 
+interface ChatMeta {
+  roomId: string;
+  lastMessageAt: number | null;
+  lastMessageText?: string | null;
+  unreadForAdmin?: boolean;
+  unreadForStudent?: boolean;
+}
+
 export default function AdminChatDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [chatMetas, setChatMetas] = useState<Record<string, ChatMeta>>({});
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { user, userData } = useAuth();
+
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchData = async () => {
       if (!user) return;
       try {
         const token = await user.getIdToken();
-        const url = new URL(window.location.origin + "/api/admin/students");
-        url.searchParams.set("limit", "100");
-        const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json().catch(() => null);
-        if (res.ok && Array.isArray(data?.items)) {
-          setStudents(data.items.map((i: any) => ({ id: i.id, name: i.name || null, phone: i.phone || null })));
+        const [studentsRes, metaRes] = await Promise.all([
+          fetch(new URL(window.location.origin + "/api/admin/students").toString(), {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(new URL(window.location.origin + "/api/admin/chats/meta").toString(), {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        const studentsData = await studentsRes.json().catch(() => null);
+        if (studentsRes.ok && Array.isArray(studentsData?.items)) {
+          setStudents(
+            studentsData.items.map((i: any) => ({ id: i.id, name: i.name || null, phone: i.phone || null }))
+          );
         } else {
-          console.error('Students API error:', data);
+          console.error("Students API error:", studentsData);
+        }
+
+        const metaData = await metaRes.json().catch(() => null);
+        if (metaRes.ok && Array.isArray(metaData?.items)) {
+          setChatMetas(
+            metaData.items.reduce((acc: Record<string, ChatMeta>, item: ChatMeta) => {
+              if (item?.roomId) acc[item.roomId] = item;
+              return acc;
+            }, {})
+          );
+        } else {
+          console.error("Chat meta API error:", metaData);
         }
       } catch (err) {
-        console.error("Error fetching students:", err);
+        console.error("Error fetching chat data:", err);
       }
     };
-    fetchStudents();
+    fetchData();
   }, [user?.uid]);
 
-  const filteredStudents = students.filter(s => 
-    (s.name?.toLowerCase().includes(search.toLowerCase())) || 
+  const studentsWithMeta = students
+    .map((s) => ({ ...s, meta: chatMetas[s.id] }))
+    .sort((a, b) => (b.meta?.lastMessageAt || 0) - (a.meta?.lastMessageAt || 0));
+
+  const filteredStudents = studentsWithMeta.filter((s) =>
+    (s.name?.toLowerCase().includes(search.toLowerCase())) ||
     (s.phone?.includes(search))
   );
 
@@ -80,23 +114,33 @@ export default function AdminChatDashboard() {
             {filteredStudents.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-400">No students found.</div>
             ) : (
-              filteredStudents.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedStudent(s)}
-                  className={`w-full p-4 flex items-center space-x-3 transition-all hover:bg-neutral-50 text-left ${
-                    selectedStudent?.id === s.id ? 'bg-neutral-50 border-r-4 border-neutral-900' : ''
-                  }`}
-                >
-                  <div className="w-10 h-10 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-500 font-bold text-xs shrink-0">
-                    {s.name ? s.name[0] : "S"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-neutral-900 break-words">{s.name || "Unnamed"}</p>
-                    <p className="text-[10px] text-neutral-400 font-medium">{s.phone}</p>
-                  </div>
-                </button>
-              ))
+              filteredStudents.map((s) => {
+                const unread = s.meta?.unreadForAdmin;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedStudent(s)}
+                    className={`w-full p-4 flex items-center space-x-3 transition-all hover:bg-neutral-50 text-left ${
+                      selectedStudent?.id === s.id ? 'bg-neutral-50 border-r-4 border-neutral-900' : ''
+                    }`}
+                  >
+                    <div className="w-10 h-10 bg-neutral-100 rounded-2xl flex items-center justify-center text-neutral-500 font-bold text-xs shrink-0">
+                      {s.name ? s.name[0] : "S"}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm break-words ${unread ? 'font-bold text-neutral-900' : 'text-neutral-900'}`}>
+                          {s.name || "Unnamed"}
+                        </p>
+                        {unread ? (
+                          <span className="text-[10px] px-2 py-1 bg-amber-500 text-white rounded-full">Unread</span>
+                        ) : null}
+                      </div>
+                      <p className="text-[10px] text-neutral-400 font-medium">{s.phone}</p>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
