@@ -61,3 +61,25 @@ export function parseDateInputLocal(dateStr: string, endOfDay = true): Date {
   return new Date(year, month - 1, day, 12, 0, 0, 0);
 }
 
+/** Normalize a Firestore Timestamp / Date / number / string into a JS Date, or null. */
+export function toJsDate(val: any): Date | null {
+  if (!val) return null;
+  try {
+    let date: Date;
+    if (typeof val?.toDate === "function") {
+      date = val.toDate();
+    } else if (val instanceof Date) {
+      date = val;
+    } else if (typeof val === "number" || typeof val === "string") {
+      date = new Date(val);
+    } else if (val?.seconds) {
+      date = new Date(val.seconds * 1000);
+    } else {
+      return null;
+    }
+    return isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+

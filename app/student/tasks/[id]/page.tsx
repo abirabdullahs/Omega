@@ -8,7 +8,7 @@ import { useRouter, useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { ChevronLeft, Send, CheckCircle2, MessageSquare } from "lucide-react";
 import Link from "next/link";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toJsDate } from "@/lib/utils";
 
 export default function StudentTaskPage() {
   const { id } = useParams<{ id: string }>();
@@ -45,9 +45,13 @@ export default function StudentTaskPage() {
     fetchTask();
   }, [user, id]);
 
+  const deadlineDate = toJsDate(task?.deadline);
+  const isPastDeadline = !!deadlineDate && deadlineDate.getTime() < Date.now();
+  const isLocked = !!submission?.grade || isPastDeadline;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text || !user || !id) return;
+    if (!text || !user || !id || isLocked) return;
 
     setIsSubmitting(true);
     try {
@@ -140,11 +144,18 @@ export default function StudentTaskPage() {
           </div>
         )}
 
+        {isPastDeadline && !submission?.grade && (
+          <div className="mb-6 p-4 bg-neutral-50 border border-neutral-200 rounded-2xl text-sm text-neutral-600">
+            The deadline has passed, so this submission is now locked.
+            {submission ? " Your last saved answer is shown below." : " You did not submit an answer before the deadline."}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <textarea
               required
-              disabled={!!submission?.grade}
+              disabled={isLocked}
               rows={8}
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -152,7 +163,7 @@ export default function StudentTaskPage() {
               placeholder="Type your answer or solution here..."
             />
           </div>
-          {!submission?.grade && (
+          {!isLocked && (
             <button
               type="submit"
               disabled={isSubmitting}

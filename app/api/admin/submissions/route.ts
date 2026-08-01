@@ -71,3 +71,76 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error?.message || "Failed to list submissions", details: initError || undefined }, { status: 500 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const adminCheck = await verifyAdminRequest(req);
+    if (!adminCheck.ok) return adminCheck.response;
+
+    const db = getAdminDb();
+    if (!db) {
+      return NextResponse.json(
+        { error: "Firebase Admin setup is incomplete.", details: getAdminInitError() },
+        { status: 500 }
+      );
+    }
+
+    const body = await req.json().catch(() => null);
+    const taskId = typeof body?.taskId === "string" ? body.taskId : "";
+    const entryId = typeof body?.entryId === "string" ? body.entryId : "";
+    const grade = typeof body?.grade === "string" ? body.grade : "";
+    const feedback = typeof body?.feedback === "string" ? body.feedback : "";
+
+    if (!taskId || !entryId || !grade) {
+      return NextResponse.json({ error: "Missing taskId, entryId, or grade" }, { status: 400 });
+    }
+
+    const ref = db.collection("submissions").doc(taskId).collection("entries").doc(entryId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
+    await ref.update({ grade, feedback: feedback || null });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("Error grading submission:", error);
+    return NextResponse.json({ error: error?.message || "Failed to grade submission" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const adminCheck = await verifyAdminRequest(req);
+    if (!adminCheck.ok) return adminCheck.response;
+
+    const db = getAdminDb();
+    if (!db) {
+      return NextResponse.json(
+        { error: "Firebase Admin setup is incomplete.", details: getAdminInitError() },
+        { status: 500 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const taskId = searchParams.get("taskId") || "";
+    const entryId = searchParams.get("entryId") || "";
+    if (!taskId || !entryId) {
+      return NextResponse.json({ error: "Missing taskId or entryId" }, { status: 400 });
+    }
+
+    const ref = db.collection("submissions").doc(taskId).collection("entries").doc(entryId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
+    await ref.delete();
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("Error deleting submission:", error);
+    return NextResponse.json({ error: error?.message || "Failed to delete submission" }, { status: 500 });
+  }
+}

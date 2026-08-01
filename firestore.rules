@@ -39,8 +39,15 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isStudent()
             && request.auth.uid == studentId
+            && !('grade' in resource.data)
+            && (
+              !('deadline' in get(/databases/$(database)/documents/tasks/$(taskId)).data)
+              || get(/databases/$(database)/documents/tasks/$(taskId)).data.deadline == null
+              || get(/databases/$(database)/documents/tasks/$(taskId)).data.deadline > request.time
+            )
             && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['text', 'submittedAt', 'studentId', 'studentPhone']));
+      allow delete: if isAdmin();
     }
 
     // Notices collection
