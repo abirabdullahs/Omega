@@ -5,14 +5,14 @@ import { collection, getDocs, query, orderBy, doc, getDoc, where } from "firebas
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
-import { BookOpen, CheckCircle2, Clock, ChevronRight, Zap, History, Timer } from "lucide-react";
+import { BookOpen, CheckCircle2, Clock, ChevronRight, Zap, History } from "lucide-react";
 import { getChapterName } from "@/lib/subjects";
 import { formatDate } from "@/lib/utils";
 
 interface Task {
   id: string;
   title: string;
-  contentMarkdown: string; // Added to fetch the description
+  contentMarkdown: string;
   createdAt: any;
   deadline?: any;
 }
@@ -56,18 +56,25 @@ function getAssignmentItems(assignment: Assignment): AssignmentItem[] {
   return [];
 }
 
-// Sub-component for Live Countdown
-function CountdownTimer({ deadline }: { deadline: any }) {
+// Sub-component for Live Countdown with Seconds & Circular Progress
+function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: any }) {
   const [timeLeft, setTimeLeft] = useState<string>("Calculating...");
   const [isExpired, setIsExpired] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     if (!deadline) return;
 
-    // Convert Firestore Timestamp to milliseconds safely
+    // Convert Firestore Timestamps to milliseconds safely
     const targetTime = deadline?.toMillis 
       ? deadline.toMillis() 
       : (deadline?.seconds * 1000 || new Date(deadline).getTime());
+
+    const startTime = createdAt?.toMillis 
+      ? createdAt.toMillis() 
+      : (createdAt?.seconds * 1000 || new Date(createdAt).getTime() || (Date.now() - 86400000)); // Default fallback if no creation date
+
+    const totalDuration = targetTime - startTime;
 
     const updateTimer = () => {
       const now = Date.now();
@@ -76,34 +83,73 @@ function CountdownTimer({ deadline }: { deadline: any }) {
       if (diff <= 0) {
         setTimeLeft("Time's up");
         setIsExpired(true);
+        setProgress(100);
         return;
       }
+
+      // Calculate progress percentage for the circular ring
+      const elapsed = now - startTime;
+      let currentProgress = (elapsed / totalDuration) * 100;
+      if (currentProgress < 0) currentProgress = 0;
+      if (currentProgress > 100) currentProgress = 100;
+      setProgress(currentProgress);
 
       const d = Math.floor(diff / (1000 * 60 * 60 * 24));
       const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
       const m = Math.floor((diff / 1000 / 60) % 60);
+      const s = Math.floor((diff / 1000) % 60); // Included Seconds
 
       let timeString = "";
       if (d > 0) timeString += `${d}d `;
       if (h > 0 || d > 0) timeString += `${h}h `;
-      timeString += `${m}m left`;
+      if (m > 0 || h > 0 || d > 0) timeString += `${m}m `;
+      timeString += `${s}s`; // Always show seconds
 
       setTimeLeft(timeString);
     };
 
     updateTimer(); // Initial call
-    const intervalId = setInterval(updateTimer, 60000); // Update every minute
+    const intervalId = setInterval(updateTimer, 1000); // Update every 1 second
 
     return () => clearInterval(intervalId);
-  }, [deadline]);
+  }, [deadline, createdAt]);
 
   if (!deadline) return null;
 
+  // SVG parameters for the progress ring
+  const radius = 6;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+
   return (
-    <span className={`text-[10px] font-bold flex items-center px-2 py-1 rounded-md ${isExpired ? "text-red-600 bg-red-50" : "text-amber-600 bg-amber-50"}`}>
-      <Timer size={12} className="mr-1" />
-      {timeLeft}
-    </span>
+    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm ${isExpired ? "border-red-200 bg-red-50 text-red-600" : "border-amber-200 bg-amber-50 text-amber-600"}`}>
+      {/* Small Circular Progress Indicator */}
+      <div className="relative flex items-center justify-center w-4 h-4 flex-shrink-0">
+        <svg className="w-full h-full transform -rotate-90">
+          <circle 
+            cx="8" cy="8" r={radius} 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            fill="transparent" 
+            className="opacity-20" 
+          />
+          <circle 
+            cx="8" cy="8" r={radius} 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            fill="transparent" 
+            strokeDasharray={circumference} 
+            strokeDashoffset={strokeDashoffset} 
+            strokeLinecap="round"
+            className="transition-all duration-1000 ease-linear"
+          />
+        </svg>
+      </div>
+      {/* Time Text with tabular-nums to prevent layout shift during countdown */}
+      <span className="text-[11px] font-bold tabular-nums">
+        {timeLeft}
+      </span>
+    </div>
   );
 }
 
@@ -166,7 +212,69 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-10 pb-20">
-      {/* Running Chapters Section */}
+      
+      {/* 1. Tasks Section (Moved to the Top) */}
+      <section className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="text-blue-500 w-5 h-5" />
+            <h2 className="text-xl font-bold text-neutral-900">Module Tasks</h2>
+          </div>
+          <span className="text-sm text-neutral-500">Tap a task for details and submission status.</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          {(showAllTasks ? tasks : tasks.slice(0, 5)).map((task) => {
+            const submission = submissions[task.id];
+            const isDone = !!submission;
+            return (
+              <Link 
+                key={task.id} 
+                href={`/student/tasks/${task.id}`}
+                className="bg-white p-5 rounded-2xl border border-neutral-100 hover:border-neutral-200 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between group"
+              >
+                <div className="flex flex-1 items-start space-x-4 mb-3 sm:mb-0 mr-4">
+                  <div className={`p-3 rounded-xl flex-shrink-0 mt-1 ${isDone ? "bg-emerald-50 text-emerald-600" : "bg-neutral-50 text-neutral-400"}`}>
+                    {isDone ? <CheckCircle2 size={24} /> : <BookOpen size={24} />}
+                  </div>
+                  <div className="flex-1 w-full">
+                    <h3 className="text-base font-bold text-neutral-900 leading-tight">{task.title}</h3>
+
+                    {/* Short Description */}
+                    {task.contentMarkdown && (
+                      <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 mb-2 leading-relaxed">
+                        {task.contentMarkdown.replace(/[#*`>]/g, "")}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {isDone && submission.grade ? (
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">Grade: {submission.grade}</span>
+                      ) : isDone ? (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Submitted</span>
+                      ) : (
+                        task.deadline && <CountdownTimer deadline={task.deadline} createdAt={task.createdAt} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight size={20} className="text-neutral-300 group-hover:text-neutral-900 transition-all flex-shrink-0" />
+              </Link>
+            );
+          })}
+
+          {tasks.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((v) => !v)}
+              className="text-xs font-bold text-neutral-400 py-3 hover:text-neutral-900 transition-colors text-center w-full bg-neutral-50 hover:bg-neutral-100 rounded-xl"
+            >
+              {showAllTasks ? "Show fewer tasks" : "View all tasks"}
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* 2. Running Chapters Section (Moved Down) */}
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
@@ -213,68 +321,7 @@ export default function StudentDashboard() {
         )}
       </section>
 
-      {/* Tasks Section */}
-      <section className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <BookOpen className="text-blue-500 w-5 h-5" />
-            <h2 className="text-xl font-bold text-neutral-900">Module Tasks</h2>
-          </div>
-          <span className="text-sm text-neutral-500">Tap a task for details and submission status.</span>
-        </div>
-        <div className="grid grid-cols-1 gap-3">
-          {(showAllTasks ? tasks : tasks.slice(0, 5)).map((task) => {
-            const submission = submissions[task.id];
-            const isDone = !!submission;
-            return (
-              <Link 
-                key={task.id} 
-                href={`/student/tasks/${task.id}`}
-                className="bg-white p-5 rounded-2xl border border-neutral-100 hover:border-neutral-200 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between group"
-              >
-                <div className="flex flex-1 items-start space-x-4 mb-3 sm:mb-0 mr-4">
-                  <div className={`p-3 rounded-xl flex-shrink-0 mt-1 ${isDone ? "bg-emerald-50 text-emerald-600" : "bg-neutral-50 text-neutral-400"}`}>
-                    {isDone ? <CheckCircle2 size={24} /> : <BookOpen size={24} />}
-                  </div>
-                  <div className="flex-1 w-full">
-                    <h3 className="text-base font-bold text-neutral-900 leading-tight">{task.title}</h3>
-                    
-                    {/* Short Description (2 Lines Max) */}
-                    {task.contentMarkdown && (
-                      <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 mb-2 leading-relaxed">
-                        {task.contentMarkdown.replace(/[#*`>]/g, "")}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {isDone && submission.grade ? (
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">Grade: {submission.grade}</span>
-                      ) : isDone ? (
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Submitted</span>
-                      ) : (
-                        task.deadline && <CountdownTimer deadline={task.deadline} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight size={20} className="text-neutral-300 group-hover:text-neutral-900 transition-all flex-shrink-0" />
-              </Link>
-            );
-          })}
-          
-          {tasks.length > 5 && (
-            <button
-              type="button"
-              onClick={() => setShowAllTasks((v) => !v)}
-              className="text-xs font-bold text-neutral-400 py-3 hover:text-neutral-900 transition-colors text-center w-full bg-neutral-50 hover:bg-neutral-100 rounded-xl"
-            >
-              {showAllTasks ? "Show fewer tasks" : "View all tasks"}
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* History Section */}
+      {/* 3. History Section */}
       {pastAssignments.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center gap-2">
