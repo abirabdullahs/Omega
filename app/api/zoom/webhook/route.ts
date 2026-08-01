@@ -27,6 +27,16 @@ export async function POST(req: NextRequest) {
 
     const payload = JSON.parse(rawBody);
     const event = payload?.event;
+    if (event === "endpoint.url_validation") {
+      const plainToken = payload?.payload?.plainToken || payload?.payload?.plain_token || "";
+      const encryptedToken = crypto
+        .createHmac("sha256", secret)
+        .update(plainToken)
+        .digest("base64");
+
+      return NextResponse.json({ plainToken, encryptedToken });
+    }
+
     const object = payload?.payload?.object;
     const participant = object?.participant;
     const meetingUuid = object?.uuid || object?.id;
