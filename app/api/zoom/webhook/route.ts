@@ -5,6 +5,7 @@ import crypto from "crypto";
 export const runtime = "nodejs";
 
 const WEBHOOK_SECRET =
+  process.env.ZOOM_WEBHOOK_SECRET_TOKEN ||
   process.env.ZOOM_WEBHOOK_SECRET ||
   process.env.ZOOM_WEBHOOK_TOKEN ||
   "";
@@ -164,6 +165,16 @@ export async function POST(req: NextRequest) {
           studentName: userName,
           leftAt: new Date(),
           active: false,
+        },
+        { merge: true }
+      );
+    }
+
+    if (event === "meeting.ended") {
+      await db.collection("liveSessions").doc(sessionId).set(
+        {
+          status: "ended",
+          endedAt: new Date(),
         },
         { merge: true }
       );
