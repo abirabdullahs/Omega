@@ -5,7 +5,7 @@ import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
-import { formatDate, parseDateInputLocal } from "@/lib/utils";
+import { formatDate } from "@/lib/utils"; // Removed parseDateInputLocal as we are using native Date parsing for datetime-local
 import ReactMarkdown from "react-markdown";
 import { Plus, Clock, FileText, Eye, Calendar, Trash2, X } from "lucide-react";
 
@@ -56,15 +56,18 @@ export default function AdminTasksPage() {
         contentMarkdown: content,
         createdAt: serverTimestamp(),
         createdBy: user?.uid,
-        deadline: deadline ? Timestamp.fromDate(parseDateInputLocal(deadline)) : null,
+        // Using new Date() to capture both the date and time from the datetime-local input
+        deadline: deadline ? Timestamp.fromDate(new Date(deadline)) : null,
       });
       setTitle("");
       setContent("");
       setDeadline("");
       setShowCreate(false);
       fetchTasks();
+      toast.success("Task created successfully!");
     } catch (err) {
       console.error(err);
+      toast.error("Failed to create task.");
     }
   };
 
@@ -75,6 +78,7 @@ export default function AdminTasksPage() {
       await deleteDoc(doc(db, "tasks", taskId));
       if (viewingTask?.id === taskId) setViewingTask(null);
       fetchTasks();
+      toast.success("Task deleted successfully!");
     } catch (err) {
       console.error(err);
       toast.error("Failed to delete task.");
@@ -105,12 +109,14 @@ export default function AdminTasksPage() {
             <h3 className="text-lg font-semibold">Create New Task</h3>
             <div className="flex bg-neutral-100 p-1 rounded-lg">
               <button
+                type="button"
                 onClick={() => setPreview(false)}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${!preview ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"}`}
               >
                 Editor
               </button>
               <button
+                type="button"
                 onClick={() => setPreview(true)}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${preview ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"}`}
               >
@@ -133,18 +139,18 @@ export default function AdminTasksPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Deadline (Optional)</label>
+              <label className="block text-sm font-medium text-neutral-700">Deadline (Date & Time)</label>
               <div className="relative mt-1">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900"
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-neutral-700">Content (Markdown)</label>
               {preview ? (
@@ -235,8 +241,8 @@ export default function AdminTasksPage() {
       </div>
 
       {viewingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col">
             <div className="p-6 border-b border-neutral-100 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold text-neutral-900">{viewingTask.title}</h3>
@@ -248,7 +254,7 @@ export default function AdminTasksPage() {
               <button
                 type="button"
                 onClick={() => setViewingTask(null)}
-                className="text-neutral-400 hover:text-neutral-900"
+                className="text-neutral-400 hover:text-neutral-900 bg-neutral-100 p-2 rounded-full hover:bg-neutral-200 transition-colors"
               >
                 <X size={20} />
               </button>
