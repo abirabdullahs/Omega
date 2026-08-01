@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
@@ -38,8 +38,7 @@ function toDate(value: any) {
   return null;
 }
 
-function getSessionStatus(session: LiveSession) {
-  const now = Date.now();
+function getSessionStatus(session: LiveSession, now: number) {
   const startAt = toDate(session.startAt)?.getTime() ?? 0;
   const durationMs = Number(session.durationMinutes || 0) * 60 * 1000;
   const endAt = startAt + durationMs;
@@ -50,8 +49,7 @@ function getSessionStatus(session: LiveSession) {
   return "Upcoming";
 }
 
-function getCountdown(session: LiveSession) {
-  const now = Date.now();
+function getCountdown(session: LiveSession, now: number) {
   const startAt = toDate(session.startAt)?.getTime() ?? 0;
   const durationMs = Number(session.durationMinutes || 0) * 60 * 1000;
   const endAt = startAt + durationMs;
@@ -80,8 +78,9 @@ export default function StudentLiveSessionsPage() {
   const [meetingConfig, setMeetingConfig] = useState<ZoomSdkMeetingConfig | null>(null);
   const [sdkLoading, setSdkLoading] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -104,14 +103,24 @@ export default function StudentLiveSessionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, user]);
 
   useEffect(() => {
     if (!user) return;
-    fetchSessions();
-    const interval = window.setInterval(fetchSessions, 60 * 1000);
+
+    async function loadSessions() {
+      await fetchSessions();
+    }
+
+    loadSessions();
+    const interval = window.setInterval(loadSessions, 60 * 1000);
     return () => window.clearInterval(interval);
-  }, [user]);
+  }, [fetchSessions, user]);
+
+  useEffect(() => {
+    const ticker = window.setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => window.clearInterval(ticker);
+  }, []);
 
   useEffect(() => {
     if (!meetingConfig || !user) return;
@@ -148,8 +157,8 @@ export default function StudentLiveSessionsPage() {
 
       try {
         loadZoomStyles();
-        const module = await import("@zoomus/websdk/embedded");
-        const ZoomMtgEmbedded = (module as any).default || module;
+        const zoomSdk = await import("@zoomus/websdk/embedded");
+        const ZoomMtgEmbedded = (zoomSdk as any).default || zoomSdk;
         client = ZoomMtgEmbedded.createClient();
 
         const meetingRoot = document.getElementById("zoomSDKElement");
@@ -224,10 +233,10 @@ export default function StudentLiveSessionsPage() {
 
   const nearestSession = useMemo(() => {
     const valid = sessions
-      .filter((session) => getSessionStatus(session) !== "Cancelled")
+      .filter((session) => getSessionStatus(session, now) !== "Cancelled")
       .sort((a, b) => (toDate(a.startAt)?.getTime() || 0) - (toDate(b.startAt)?.getTime() || 0));
     return valid[0] || null;
-  }, [sessions]);
+  }, [sessions, now]);
 
   const handleJoin = async (session: LiveSession) => {
     if (!user) return;
@@ -302,11 +311,11 @@ export default function StudentLiveSessionsPage() {
           </div>
           <div className="rounded-3xl border border-neutral-100 bg-white p-6 shadow-sm">
             <p className="text-sm text-neutral-500">Live now</p>
-            <p className="mt-3 text-3xl font-bold text-neutral-900">{sessions.filter((session) => getSessionStatus(session) === "Live").length}</p>
+            <p className="mt-3 text-3xl font-bold text-neutral-900">{sessions.filter((session) => getSessionStatus(session, now) === "Live").length}</p>
           </div>
           <div className="rounded-3xl border border-neutral-100 bg-white p-6 shadow-sm">
             <p className="text-sm text-neutral-500">Upcoming</p>
-            <p className="mt-3 text-3xl font-bold text-neutral-900">{sessions.filter((session) => getSessionStatus(session) === "Upcoming").length}</p>
+            <p className="mt-3 text-3xl font-bold text-neutral-900">{sessions.filter((session) => getSessionStatus(session, now) === "Upcoming").length}</p>
           </div>
         </div>
       </div>
@@ -344,10 +353,9 @@ export default function StudentLiveSessionsPage() {
           <div className="rounded-3xl border border-dashed border-neutral-200 bg-white p-10 text-center text-neutral-500">No live sessions have been scheduled yet.</div>
         ) : (
           sessions.map((session) => {
-            const status = getSessionStatus(session);
+            const status = getSessionStatus(session, now);
             const startAt = toDate(session.startAt);
-            const countdown = getCountdown(session);
-            const now = Date.now();
+            const countdown = getCountdown(session, now);
             const startMs = startAt?.getTime() ?? 0;
             const durationMs = Number(session.durationMinutes || 0) * 60 * 1000;
             const endMs = startMs + durationMs;
