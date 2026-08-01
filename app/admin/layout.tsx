@@ -4,6 +4,8 @@ import { useAuth } from "@/components/auth-provider";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -11,10 +13,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
+
+  // Live subscription so the "Live Chat" nav item shows a dot the instant
+  // any student sends a new message, without needing a page reload.
+  useEffect(() => {
+    if (!user || userData?.role !== "admin") return;
+    const unsub = onSnapshot(
+      collection(db, "chats_meta"),
+      (snap) => {
+        setHasUnreadChat(snap.docs.some((d) => !!d.data()?.unreadForAdmin));
+      },
+      (err) => console.error("Chat meta listener error:", err)
+    );
+    return () => unsub();
+  }, [user?.uid, userData?.role]);
 
   useEffect(() => {
     if (!loading) {
@@ -60,6 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
+              const showDot = item.href === "/admin/chats" && hasUnreadChat;
               return (
                 <Link
                   key={item.name}
@@ -71,7 +89,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   }`}
                 >
                   <item.icon className="w-5 h-5 mr-3" />
-                  {item.name}
+                  <span className="flex items-center gap-2">
+                    {item.name}
+                    {showDot ? <span className="h-2 w-2 rounded-full bg-amber-500" /> : null}
+                  </span>
                 </Link>
               );
             })}
@@ -116,6 +137,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <nav className="border-t border-neutral-100 px-4 py-3 space-y-1 animate-menu-in">
                 {navItems.map((item) => {
                   const isActive = pathname === item.href;
+                  const showDot = item.href === "/admin/chats" && hasUnreadChat;
                   return (
                     <Link
                       key={item.name}
@@ -128,7 +150,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       }`}
                     >
                       <item.icon className="w-5 h-5 mr-3" />
-                      {item.name}
+                      <span className="flex items-center gap-2">
+                        {item.name}
+                        {showDot ? <span className="h-2 w-2 rounded-full bg-amber-500" /> : null}
+                      </span>
                     </Link>
                   );
                 })}

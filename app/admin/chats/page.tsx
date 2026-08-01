@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import ChatInterface from "@/components/chat-interface";
 import { Search, MessageCircle, ArrowLeft } from "lucide-react";
@@ -28,44 +30,51 @@ export default function AdminChatDashboard() {
   const { user, userData } = useAuth();
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchStudents = async () => {
       if (!user) return;
       try {
         const token = await user.getIdToken();
-        const [studentsRes, metaRes] = await Promise.all([
-          fetch(new URL(window.location.origin + "/api/admin/students").toString(), {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(new URL(window.location.origin + "/api/admin/chats/meta").toString(), {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
-        const studentsData = await studentsRes.json().catch(() => null);
-        if (studentsRes.ok && Array.isArray(studentsData?.items)) {
+        const res = await fetch(new URL(window.location.origin + "/api/admin/students").toString(), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(data?.items)) {
           setStudents(
-            studentsData.items.map((i: any) => ({ id: i.id, name: i.name || null, phone: i.phone || null }))
+            data.items.map((i: any) => ({ id: i.id, name: i.name || null, phone: i.phone || null }))
           );
         } else {
-          console.error("Students API error:", studentsData);
-        }
-
-        const metaData = await metaRes.json().catch(() => null);
-        if (metaRes.ok && Array.isArray(metaData?.items)) {
-          setChatMetas(
-            metaData.items.reduce((acc: Record<string, ChatMeta>, item: ChatMeta) => {
-              if (item?.roomId) acc[item.roomId] = item;
-              return acc;
-            }, {})
-          );
-        } else {
-          console.error("Chat meta API error:", metaData);
+          console.error("Students API error:", data);
         }
       } catch (err) {
-        console.error("Error fetching chat data:", err);
+        console.error("Error fetching students:", err);
       }
     };
-    fetchData();
+    fetchStudents();
+  }, [user?.uid]);
+
+  // Live subscription — new messages update lastMessageAt/unread flags
+  // instantly, so the list re-sorts and bolds without a page reload.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      collection(db, "chats_meta"),
+      (snap) => {
+        const next: Record<string, ChatMeta> = {};
+        snap.docs.forEach((d) => {
+          const data: any = d.data();
+          next[d.id] = {
+            roomId: d.id,
+            lastMessageAt: data?.lastMessageAt?.toMillis ? data.lastMessageAt.toMillis() : data?.lastMessageAt || null,
+            lastMessageText: data?.lastMessageText || null,
+            unreadForAdmin: !!data?.unreadForAdmin,
+            unreadForStudent: !!data?.unreadForStudent,
+          };
+        });
+        setChatMetas(next);
+      },
+      (err) => console.error("Chat meta listener error:", err)
+    );
+    return () => unsub();
   }, [user?.uid]);
 
   const studentsWithMeta = students

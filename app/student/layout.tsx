@@ -4,6 +4,8 @@ import { useAuth } from "@/components/auth-provider";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X } from "lucide-react";
 
 interface ChatMetaItem {
@@ -32,23 +34,24 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     }
   }, [user, userData, loading, router]);
 
+  // Live subscription so the "unread" dot on the nav appears the instant
+  // a mentor replies, without needing a page reload.
   useEffect(() => {
-    const fetchChatMeta = async () => {
-      if (!user) return;
-      try {
-        const res = await fetch("/api/chats/meta", {
-          headers: { Authorization: `Bearer ${await user.getIdToken()}` },
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.item) {
-          setChatMeta(data.item);
+    if (!user) return;
+    const unsub = onSnapshot(
+      doc(db, "chats_meta", user.uid),
+      (snap) => {
+        if (snap.exists()) {
+          const data: any = snap.data();
+          setChatMeta({ roomId: user.uid, unreadForStudent: !!data?.unreadForStudent });
+        } else {
+          setChatMeta(null);
         }
-      } catch (err) {
-        console.error("Failed to fetch chat meta:", err);
-      }
-    };
-    fetchChatMeta();
-  }, [user]);
+      },
+      (err) => console.error("Chat meta listener error:", err)
+    );
+    return () => unsub();
+  }, [user?.uid]);
 
   if (loading || !user || userData?.role !== "student" || userData.passwordChanged === false) {
     return (

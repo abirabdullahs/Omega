@@ -27,7 +27,6 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
-  const socketRef = useRef<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,8 +127,23 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
     // Persist to Firestore; realtime listener will pick it up
     try {
       const messagesRef = collection(db, "chats", roomId, "messages");
-        await addDoc(messagesRef, messageData);
-        setInput("");
+      await addDoc(messagesRef, messageData);
+      setInput("");
+
+      // Update the room's meta (last message, unread flags) so the students
+      // list / nav badge can react live, without waiting for a page reload.
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch("/api/chats/touch-meta", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ roomId, text: messageData.text }),
+          });
+        }
+      } catch (metaErr) {
+        console.warn("Unable to update chat meta:", metaErr);
+      }
     } catch (err: any) {
       console.error("Error sending message:", err);
       setSendError(err?.message || String(err));

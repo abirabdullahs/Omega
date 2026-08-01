@@ -84,6 +84,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Chat meta — last message preview + unread flags per room. Only the
+    // server (Admin SDK, via /api/chats/touch-meta and mark-read routes)
+    // writes this; clients only ever read it for live unread indicators.
+    match /chats_meta/{roomId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == roomId);
+      allow write: if false;
+    }
+
     // Ephemeral chat — allow students to create their own messages and admins to create messages;
     // only admins may update or delete messages.
     match /chats/{studentId}/messages/{messageId} {
