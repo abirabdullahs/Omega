@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@/lib/utils";
-import { Plus, Clock, Play, StopCircle, X, Pencil, Check } from "lucide-react";
+import { Plus, Clock, Play, ArrowRight, StopCircle, X, Pencil, Check } from "lucide-react";
 
 interface LiveSession {
   id: string;
@@ -20,6 +20,16 @@ interface LiveSession {
   zoomMeetingInternalId?: string;
   zoomMeetingUuid?: string;
 }
+
+interface ZoomSdkMeetingConfig {
+  meetingNumber: string;
+  password: string;
+  sdkKey: string;
+  signature: string;
+  topic: string;
+}
+
+const ZOOM_SDK_VERSION = "2.18.3";
 
 function toDate(value: any) {
   if (!value) return null;
@@ -39,6 +49,12 @@ function getSessionStatus(session: LiveSession) {
   if (session.status === "ended" || now >= endAt) return "Ended";
   if (session.status === "live" || now >= startAt) return "Live";
   return "Upcoming";
+}
+
+function getMeetingUrl(session: LiveSession) {
+  if (session.zoomJoinUrl) return String(session.zoomJoinUrl).trim();
+  if (session.zoomMeetingId) return `https://zoom.us/j/${encodeURIComponent(String(session.zoomMeetingId).trim())}`;
+  return null;
 }
 
 function getCountdownText(session: LiveSession) {
@@ -70,6 +86,10 @@ export default function AdminLiveSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingSession, setEditingSession] = useState<LiveSession | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [meetingConfig, setMeetingConfig] = useState<ZoomSdkMeetingConfig | null>(null);
+  const [sdkLoading, setSdkLoading] = useState(false);
+  const [sdkError, setSdkError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     topic: "",
@@ -81,7 +101,7 @@ export default function AdminLiveSessionsPage() {
     zoomJoinUrl: "",
   });
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -100,11 +120,14 @@ export default function AdminLiveSessionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchSessions();
-  }, [user?.uid]);
+    const load = async () => {
+      await fetchSessions();
+    };
+    load();
+  }, [fetchSessions]);
 
   const resetForm = () => {
     setEditingSession(null);
@@ -119,6 +142,153 @@ export default function AdminLiveSessionsPage() {
       zoomJoinUrl: "",
     });
   };
+
+  const handleHost = async (session: LiveSession) => {
+    if (!user) return;
+    setActiveSessionId(session.id);
+    setSdkError(null);
+    setSdkLoading(true);
+    setMeetingConfig(null);
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/live-sessions/join", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to prepare host meeting.");
+      }
+
+      if (data.meetingNumber && data.signature && data.sdkKey) {
+        setMeetingConfig({
+          meetingNumber: data.meetingNumber,
+          password: data.password || "",
+          sdkKey: data.sdkKey,
+          signature: data.signature,
+          topic: data.topic || session.title || session.topic || "Live session",
+        });
+        toast.success("Opening host meeting in browser...");
+      } else if (data.meetingUrl) {
+        window.open(data.meetingUrl, "_blank");
+        toast.success("Opening meeting link...");
+      } else {
+        throw new Error("Host meeting details are not available.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Unable to open host meeting.");
+      setSdkLoading(false);
+      setActiveSessionId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!meetingConfig || !user) return;
+
+    let client: any;
+    let isActive = true;
+
+    const loadZoomStyles = () => {
+      const root = document.head;
+      const baseUrl = `https://source.zoom.us/${ZOOM_SDK_VERSION}`;
+      const existingBootstrap = root.querySelector('link[data-zoom-sdk="bootstrap"]');
+      const existingReactSelect = root.querySelector('link[data-zoom-sdk="react-select"]');
+
+      if (!existingBootstrap) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = `${baseUrl}/css/bootstrap.css`;
+        link.dataset.zoomSdk = "bootstrap";
+        root.appendChild(link);
+      }
+
+      if (!existingReactSelect) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = `${baseUrl}/css/react-select.css`;
+        link.dataset.zoomSdk = "react-select";
+        root.appendChild(link);
+      }
+    };
+
+    const joinLiveSession = async () => {
+      setSdkError(null);
+      setSdkLoading(true);
+
+      try {
+        loadZoomStyles();
+        const zoomSdk = await import("@zoomus/websdk/embedded");
+        const ZoomMtgEmbedded = (zoomSdk as any).default || zoomSdk;
+        client = ZoomMtgEmbedded.createClient();
+
+        const meetingRoot = document.getElementById("zoomSDKElement");
+        if (!meetingRoot) throw new Error("Unable to find Zoom meeting root container.");
+
+        client.init({
+          zoomAppRoot: meetingRoot,
+          language: "en-US",
+          leaveUrl: `${window.location.origin}/admin/live-sessions`,
+          disableInvite: true,
+          disableCallOut: true,
+          disableRecord: true,
+          disableJoinAudio: false,
+          showMeetingHeader: true,
+          isSupportAV: true,
+          success: () => {
+            if (!isActive) return;
+            setSdkLoading(false);
+          },
+          error: (error: any) => {
+            if (!isActive) return;
+            console.error("Zoom SDK init failed", error);
+            setSdkError(String(error));
+            setSdkLoading(false);
+          },
+        });
+
+        client.join({
+          sdkKey: meetingConfig.sdkKey,
+          signature: meetingConfig.signature,
+          meetingNumber: meetingConfig.meetingNumber,
+          password: meetingConfig.password || "",
+          userName: user.displayName || user.email || "Host",
+          userEmail: user.email || "",
+          success: () => {
+            if (!isActive) return;
+            setSdkLoading(false);
+          },
+          error: (error: any) => {
+            if (!isActive) return;
+            console.error("Zoom SDK join failed", error);
+            setSdkError(String(error));
+            setSdkLoading(false);
+          },
+        });
+      } catch (err: any) {
+        console.error("Zoom SDK error", err);
+        if (isActive) {
+          setSdkError(err?.message || "Unable to start Zoom meeting.");
+          setSdkLoading(false);
+        }
+      }
+    };
+
+    joinLiveSession();
+
+    return () => {
+      isActive = false;
+      if (client?.leaveMeeting) {
+        try {
+          client.leaveMeeting();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    };
+  }, [meetingConfig, user]);
 
   const openEdit = (session: LiveSession) => {
     setEditingSession(session);
@@ -344,6 +514,32 @@ export default function AdminLiveSessionsPage() {
         </div>
       )}
 
+      {meetingConfig ? (
+        <div className="rounded-3xl border border-neutral-100 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-neutral-500">Zoom host session</p>
+              <h3 className="mt-1 text-xl font-semibold text-neutral-900">{meetingConfig.topic}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMeetingConfig(null);
+                setSdkError(null);
+                setSdkLoading(false);
+              }}
+              className="inline-flex items-center rounded-2xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors"
+            >
+              Leave session
+            </button>
+          </div>
+
+          <div id="zoomSDKElement" className="min-h-[520px] rounded-3xl bg-black" />
+          {sdkLoading ? <p className="mt-4 text-sm text-neutral-500">Loading Zoom meeting…</p> : null}
+          {sdkError ? <p className="mt-4 text-sm text-red-600">{sdkError}</p> : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-2">
         {loading ? (
           <div className="col-span-full rounded-3xl border border-neutral-100 bg-white p-8 text-center text-neutral-400">Loading live sessions...</div>
@@ -389,6 +585,26 @@ export default function AdminLiveSessionsPage() {
                       <Pencil className="w-4 h-4" />
                       Edit
                     </button>
+                    {session.zoomMeetingId ? (
+                      <button
+                        onClick={() => handleHost(session)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Host in browser
+                      </button>
+                    ) : null}
+                    {getMeetingUrl(session) ? (
+                      <a
+                        href={getMeetingUrl(session) || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        Open meeting
+                      </a>
+                    ) : null}
                     {status !== "Ended" && status !== "Cancelled" ? (
                       <>
                         <button
