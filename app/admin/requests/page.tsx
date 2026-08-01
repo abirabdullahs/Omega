@@ -191,6 +191,7 @@ export default function AdminRequestsPage() {
                         const m = findChapterMeta(cid);
                         return m?.subject.id === subject.id;
                       });
+                      const selectedChapter = selectedPerSubject[subject.id] || "";
                       return (
                         <div key={subject.id} className="p-4 rounded-2xl border border-neutral-100 bg-neutral-50/50 space-y-3">
                           <div>
@@ -198,40 +199,40 @@ export default function AdminRequestsPage() {
                               {subject.name}
                             </p>
                           </div>
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             {chaptersForSubject.length === 0 ? (
                               <p className="text-xs text-neutral-400">No chapters requested in this subject.</p>
                             ) : (
-                              chaptersForSubject.map((chapterId) => {
-                                const meta = findChapterMeta(chapterId);
-                                const selected = selectedPerSubject[subject.id] === chapterId;
-                                return (
-                                  <div key={chapterId} className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 bg-white">
-                                    <div className="flex items-center space-x-3">
-                                      <input
-                                        type="radio"
-                                        name={`sel-${subject.id}`}
-                                        checked={selected}
-                                        onChange={() => setSelectedPerSubject({ ...selectedPerSubject, [subject.id]: chapterId })}
-                                      />
-                                      <div>
-                                        <p className="text-sm font-bold text-neutral-900">{meta?.chapter.name || chapterId}</p>
-                                        <p className="text-[10px] text-neutral-400">Paper {meta?.chapter.paper}</p>
-                                      </div>
-                                    </div>
-                                    <div className="w-40">
-                                      <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Deadline</label>
-                                      <input
-                                        type="date"
-                                        value={deadlines[chapterId] || ""}
-                                        onChange={(e) => setDeadlines({ ...deadlines, [chapterId]: e.target.value })}
-                                        className="w-full pl-3 pr-2 py-2 border border-neutral-200 rounded-xl text-sm bg-white"
-                                        disabled={!selected}
-                                      />
-                                    </div>
-                                  </div>
-                                );
-                              })
+                              <div className="flex items-end gap-3">
+                                <div className="flex-1">
+                                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Chapter</label>
+                                  <select
+                                    value={selectedChapter}
+                                    onChange={(e) => setSelectedPerSubject({ ...selectedPerSubject, [subject.id]: e.target.value || null })}
+                                    className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl text-sm bg-white font-medium text-neutral-900"
+                                  >
+                                    <option value="">Select a chapter…</option>
+                                    {chaptersForSubject.map((chapterId) => {
+                                      const meta = findChapterMeta(chapterId);
+                                      return (
+                                        <option key={chapterId} value={chapterId}>
+                                          {meta?.chapter.name || chapterId} (Paper {meta?.chapter.paper})
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                                <div className="w-40">
+                                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-1">Deadline</label>
+                                  <input
+                                    type="date"
+                                    value={deadlines[selectedChapter] || ""}
+                                    onChange={(e) => setDeadlines({ ...deadlines, [selectedChapter]: e.target.value })}
+                                    className="w-full pl-3 pr-2 py-2.5 border border-neutral-200 rounded-xl text-sm bg-white"
+                                    disabled={!selectedChapter}
+                                  />
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
