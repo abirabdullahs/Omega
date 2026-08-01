@@ -1,0 +1,111 @@
+diff --git a/app/admin/live-sessions/page.tsx b/app/admin/live-sessions/page.tsx
+index b6b2f44..a9c4d92 100644
+--- a/app/admin/live-sessions/page.tsx
++++ b/app/admin/live-sessions/page.tsx
+@@ -34,7 +34,8 @@ const ZOOM_SDK_VERSION = "2.18.3";
+ function toDate(value: any) {
+   if (!value) return null;
+   if (typeof value?.toDate === "function") return value.toDate();
+-  if (value?.seconds) return new Date(value.seconds * 1000);
++  if (typeof value?.seconds === "number") return new Date(value.seconds * 1000);
++  if (typeof value?._seconds === "number") return new Date(value._seconds * 1000);
+   if (typeof value === "string" || typeof value === "number") return new Date(value);
+   return null;
+ }
+@@ -336,6 +337,9 @@ export default function AdminLiveSessionsPage() {
+         throw new Error(data?.error || "Failed to save live session.");
+       }
+       toast.success(editingSession ? "Live session updated." : "Live session created.");
++      if (data.zoomWarning) {
++        toast.error(`Heads up: ${data.zoomWarning}`);
++      }
+       resetForm();
+       setShowCreate(false);
+       fetchSessions();
+@@ -345,15 +349,16 @@ export default function AdminLiveSessionsPage() {
+     }
+   };
+ 
+-  const handleAction = async (sessionId: string, action: string) => {
++  const handleAction = async (session: LiveSession, action: string) => {
+     if (!user) return;
++    const sessionId = session.id;
+     const confirmLabel =
+       action === "cancel"
+         ? "Cancel this session?"
+         : action === "end"
+         ? "Mark this session as ended?"
+         : action === "start"
+-        ? "Mark this session as live?"
++        ? "Mark this session as live and open the Zoom meeting?"
+         : "Apply action?";
+     if (!window.confirm(confirmLabel)) return;
+ 
+@@ -369,6 +374,14 @@ export default function AdminLiveSessionsPage() {
+         throw new Error(data?.error || "Failed to update session status.");
+       }
+       toast.success(`Session ${action}ed.`);
++      if (action === "start") {
++        const meetingUrl = getMeetingUrl(session);
++        if (meetingUrl) {
++          window.open(meetingUrl, "_blank", "noopener,noreferrer");
++        } else {
++          toast.error("No Zoom link is attached to this session yet — click Edit to add one.");
++        }
++      }
+       fetchSessions();
+     } catch (err: any) {
+       console.error(err);
+@@ -608,14 +621,14 @@ export default function AdminLiveSessionsPage() {
+                     {status !== "Ended" && status !== "Cancelled" ? (
+                       <>
+                         <button
+-                          onClick={() => handleAction(session.id, session.status === "live" ? "end" : "start")}
++                          onClick={() => handleAction(session, session.status === "live" ? "end" : "start")}
+                           className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
+                         >
+                           {session.status === "live" ? <StopCircle className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                           {session.status === "live" ? "End" : "Start"}
+                         </button>
+                         <button
+-                          onClick={() => handleAction(session.id, "cancel")}
++                          onClick={() => handleAction(session, "cancel")}
+                           className="inline-flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 transition-colors"
+                         >
+                           <X className="w-4 h-4" />
+diff --git a/app/api/admin/live-sessions/route.ts b/app/api/admin/live-sessions/route.ts
+index e52545c..1c5de23 100644
+--- a/app/api/admin/live-sessions/route.ts
++++ b/app/api/admin/live-sessions/route.ts
+@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
+           password?: string;
+         }
+       | null = null;
++    let zoomWarning: string | null = null;
+ 
+     if (!zoomMeetingId && !zoomMeetingInternalId) {
+       try {
+@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
+         });
+       } catch (zoomError: any) {
+         console.warn("Zoom meeting creation failed:", zoomError?.message || zoomError);
++        zoomWarning = zoomError?.message || "Zoom meeting could not be created automatically.";
+       }
+     }
+ 
+@@ -99,11 +101,14 @@ export async function POST(req: NextRequest) {
+       if (zoomMeetingUuid) sessionData.zoomMeetingUuid = String(zoomMeetingUuid).trim();
+       if (zoomJoinUrl) sessionData.zoomJoinUrl = String(zoomJoinUrl).trim();
+       if (zoomMeetingPassword) sessionData.zoomMeetingPassword = String(zoomMeetingPassword).trim();
++      if (!sessionData.zoomJoinUrl && !zoomWarning) {
++        zoomWarning = "No Zoom join link is attached to this session yet. Add one by editing the session.";
++      }
+     }
+ 
+     const docRef = await db.collection("liveSessions").add(sessionData);
+ 
+-    return NextResponse.json({ success: true, id: docRef.id, session: { id: docRef.id, ...sessionData } }, { status: 201 });
++    return NextResponse.json({ success: true, id: docRef.id, session: { id: docRef.id, ...sessionData }, zoomWarning }, { status: 201 });
+   } catch (err: any) {
+     console.error("Error creating live session:", err);
+     return NextResponse.json({ error: err?.message || "Failed to create live session", details: getAdminInitError() || undefined }, { status: 500 });
