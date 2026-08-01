@@ -86,12 +86,6 @@ export default function AdminRequestsPage() {
         });
       }
 
-      if (itemsToAssign.length === 0) {
-        toast.error("Please select at least one chapter to assign.");
-        setIsAssigning(false);
-        return;
-      }
-
       const token = await user.getIdToken();
       const res = await fetch(`${window.location.origin}/api/admin/requests`, {
         method: "POST",
@@ -102,7 +96,7 @@ export default function AdminRequestsPage() {
       if (res.ok) {
         setSelectedRequest(null);
         setReloadKey(k => k + 1);
-        toast.success("Chapters assigned successfully!");
+        toast.success(itemsToAssign.length === 0 ? "Closed without changes." : "Chapters assigned successfully!");
       } else {
         console.error('Admin assign error:', data);
         toast.error(data?.error || "Failed to assign chapters.");

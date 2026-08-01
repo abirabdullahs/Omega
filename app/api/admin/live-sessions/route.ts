@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
           password?: string;
         }
       | null = null;
+    let zoomWarning: string | null = null;
 
     if (!zoomMeetingId && !zoomMeetingInternalId) {
       try {
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
         });
       } catch (zoomError: any) {
         console.warn("Zoom meeting creation failed:", zoomError?.message || zoomError);
+        zoomWarning = zoomError?.message || "Zoom meeting could not be created automatically.";
       }
     }
 
@@ -99,11 +101,14 @@ export async function POST(req: NextRequest) {
       if (zoomMeetingUuid) sessionData.zoomMeetingUuid = String(zoomMeetingUuid).trim();
       if (zoomJoinUrl) sessionData.zoomJoinUrl = String(zoomJoinUrl).trim();
       if (zoomMeetingPassword) sessionData.zoomMeetingPassword = String(zoomMeetingPassword).trim();
+      if (!sessionData.zoomJoinUrl && !zoomWarning) {
+        zoomWarning = "No Zoom join link is attached to this session yet. Add one by editing the session.";
+      }
     }
 
     const docRef = await db.collection("liveSessions").add(sessionData);
 
-    return NextResponse.json({ success: true, id: docRef.id, session: { id: docRef.id, ...sessionData } }, { status: 201 });
+    return NextResponse.json({ success: true, id: docRef.id, session: { id: docRef.id, ...sessionData }, zoomWarning }, { status: 201 });
   } catch (err: any) {
     console.error("Error creating live session:", err);
     return NextResponse.json({ error: err?.message || "Failed to create live session", details: getAdminInitError() || undefined }, { status: 500 });

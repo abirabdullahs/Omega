@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X, BookMarked } from "lucide-react";
 import { FullScreenLoader } from "@/components/ui/loader";
 import { NotificationBell } from "@/components/ui/notification-bell";
 
@@ -56,6 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Live Chat", href: "/admin/chats", icon: MessageSquare },
     { name: "Tracking", href: "/admin/tracking", icon: Clock },
     { name: "Requests", href: "/admin/requests", icon: MessageSquare },
+    { name: "Progress", href: "/admin/progress", icon: BookMarked },
     { name: "Tasks", href: "/admin/tasks", icon: BookOpen },
     { name: "Submissions", href: "/admin/submissions", icon: MessageSquare },
     { name: "Notices", href: "/admin/notices", icon: Bell },

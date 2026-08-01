@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@/lib/utils";
-import { Plus, Clock, Play, ArrowRight, StopCircle, X, Pencil, Check } from "lucide-react";
+import { Plus, Clock, Play, ArrowRight, StopCircle, X, Pencil, Check, Trash2 } from "lucide-react";
 
 interface LiveSession {
   id: string;
@@ -91,6 +91,7 @@ export default function AdminLiveSessionsPage() {
   const [meetingConfig, setMeetingConfig] = useState<ZoomSdkMeetingConfig | null>(null);
   const [sdkLoading, setSdkLoading] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
+  const [showAllSessions, setShowAllSessions] = useState(false);
   const [form, setForm] = useState({
     title: "",
     topic: "",
@@ -291,6 +292,15 @@ export default function AdminLiveSessionsPage() {
     };
   }, [meetingConfig, user]);
 
+  useEffect(() => {
+    if (!showCreate) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [showCreate]);
+
   const openEdit = (session: LiveSession) => {
     setEditingSession(session);
     setShowCreate(true);
@@ -337,6 +347,9 @@ export default function AdminLiveSessionsPage() {
         throw new Error(data?.error || "Failed to save live session.");
       }
       toast.success(editingSession ? "Live session updated." : "Live session created.");
+      if (data.zoomWarning) {
+        toast.error(`Heads up: ${data.zoomWarning}`);
+      }
       resetForm();
       setShowCreate(false);
       fetchSessions();
@@ -346,15 +359,16 @@ export default function AdminLiveSessionsPage() {
     }
   };
 
-  const handleAction = async (sessionId: string, action: string) => {
+  const handleAction = async (session: LiveSession, action: string) => {
     if (!user) return;
+    const sessionId = session.id;
     const confirmLabel =
       action === "cancel"
         ? "Cancel this session?"
         : action === "end"
         ? "Mark this session as ended?"
         : action === "start"
-        ? "Mark this session as live?"
+        ? "Mark this session as live and open the Zoom meeting?"
         : "Apply action?";
     if (!window.confirm(confirmLabel)) return;
 
@@ -370,10 +384,39 @@ export default function AdminLiveSessionsPage() {
         throw new Error(data?.error || "Failed to update session status.");
       }
       toast.success(`Session ${action}ed.`);
+      if (action === "start") {
+        const meetingUrl = getMeetingUrl(session);
+        if (meetingUrl) {
+          window.open(meetingUrl, "_blank", "noopener,noreferrer");
+        } else {
+          toast.error("No Zoom link is attached to this session yet — click Edit to add one.");
+        }
+      }
       fetchSessions();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Unable to update session.");
+    }
+  };
+
+  const handleDelete = async (session: LiveSession) => {
+    if (!user) return;
+    if (!window.confirm(`Permanently delete "${session.title}"? This also removes its attendance records and cannot be undone.`)) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/live-sessions/${encodeURIComponent(session.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to delete session.");
+      }
+      toast.success("Live session deleted.");
+      setSessions((prev) => prev.filter((s) => s.id !== session.id));
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Unable to delete session.");
     }
   };
 
@@ -416,9 +459,31 @@ export default function AdminLiveSessionsPage() {
       </div>
 
       {showCreate && (
-        <div className="rounded-3xl border border-neutral-100 bg-white p-8 shadow-sm">
-          <h3 className="text-lg font-semibold text-neutral-900">{editingSession ? "Edit Live Session" : "Create Live Session"}</h3>
-          <form onSubmit={handleSave} className="mt-6 grid gap-6 md:grid-cols-2">
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              resetForm();
+              setShowCreate(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-2xl my-8 sm:my-0 rounded-3xl border border-neutral-100 bg-white p-6 sm:p-8 shadow-xl max-h-[calc(100dvh-4rem)] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-neutral-900">{editingSession ? "Edit Live Session" : "Create Live Session"}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setShowCreate(false);
+                }}
+                aria-label="Close"
+                className="p-2 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="grid gap-6 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-medium text-neutral-700">Title</span>
               <input
@@ -511,7 +576,8 @@ export default function AdminLiveSessionsPage() {
                 Save session
               </button>
             </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
 
@@ -549,7 +615,7 @@ export default function AdminLiveSessionsPage() {
             No live sessions found yet.
           </div>
         ) : (
-          sessions.map((session) => {
+          (showAllSessions ? sessions : sessions.slice(0, 4)).map((session) => {
             const status = getSessionStatus(session);
             const startAt = toDate(session.startAt);
             return (
@@ -609,14 +675,14 @@ export default function AdminLiveSessionsPage() {
                     {status !== "Ended" && status !== "Cancelled" ? (
                       <>
                         <button
-                          onClick={() => handleAction(session.id, session.status === "live" ? "end" : "start")}
+                          onClick={() => handleAction(session, session.status === "live" ? "end" : "start")}
                           className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
                         >
                           {session.status === "live" ? <StopCircle className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                           {session.status === "live" ? "End" : "Start"}
                         </button>
                         <button
-                          onClick={() => handleAction(session.id, "cancel")}
+                          onClick={() => handleAction(session, "cancel")}
                           className="inline-flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 transition-colors"
                         >
                           <X className="w-4 h-4" />
@@ -624,6 +690,13 @@ export default function AdminLiveSessionsPage() {
                         </button>
                       </>
                     ) : null}
+                    <button
+                      onClick={() => handleDelete(session)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-500 hover:bg-red-50 hover:border-red-100 hover:text-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
                   </div>
                 </div>
               </div>
@@ -631,6 +704,17 @@ export default function AdminLiveSessionsPage() {
           })
         )}
       </div>
+
+      {!loading && !showAllSessions && sessions.length > 4 && (
+        <div className="text-center">
+          <button
+            onClick={() => setShowAllSessions(true)}
+            className="text-sm font-semibold text-neutral-600 hover:text-neutral-900 underline underline-offset-2"
+          >
+            Show all {sessions.length} sessions
+          </button>
+        </div>
+      )}
     </div>
   );
 }
