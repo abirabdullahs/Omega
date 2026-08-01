@@ -2,14 +2,19 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock } from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading) {
@@ -83,38 +88,52 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </aside>
 
         <main className="flex-1 overflow-auto">
-          <div className="bg-white border-b border-neutral-200 p-4 md:hidden">
-            <div className="flex items-center justify-between">
+          <div className="bg-white border-b border-neutral-200 md:hidden sticky top-0 z-20">
+            <div className="flex items-center justify-between p-4">
               <div>
                 <h1 className="text-lg font-bold text-neutral-900">Omega Admin</h1>
                 <p className="text-xs text-neutral-500">Management Portal</p>
               </div>
-              <button
-                onClick={() => logout()}
-                className="text-red-600 text-sm font-medium"
-              >
-                Logout
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => logout()}
+                  className="text-red-600 text-sm font-medium px-2 py-2"
+                >
+                  Logout
+                </button>
+                <button
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  aria-label="Toggle menu"
+                  aria-expanded={mobileMenuOpen}
+                  className="p-2 text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+                >
+                  {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                </button>
+              </div>
             </div>
-            <nav className="mt-4 overflow-x-auto">
-              <div className="flex gap-2 whitespace-nowrap">
+
+            {mobileMenuOpen && (
+              <nav className="border-t border-neutral-100 px-4 py-3 space-y-1 animate-menu-in">
                 {navItems.map((item) => {
                   const isActive = pathname === item.href;
                   return (
                     <Link
                       key={item.name}
                       href={item.href}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-medium transition-colors ${
-                        isActive ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                        isActive
+                          ? "bg-neutral-900 text-white"
+                          : "text-neutral-600 hover:bg-neutral-100"
                       }`}
                     >
-                      <item.icon className="w-4 h-4" />
+                      <item.icon className="w-5 h-5 mr-3" />
                       {item.name}
                     </Link>
                   );
                 })}
-              </div>
-            </nav>
+              </nav>
+            )}
           </div>
 
           <div className="p-4 md:p-8 max-w-6xl mx-auto">

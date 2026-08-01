@@ -4,7 +4,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BookOpen, Bell, LogOut, Layout, MessageSquare } from "lucide-react";
+import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X } from "lucide-react";
 
 interface ChatMetaItem {
   roomId: string;
@@ -16,6 +16,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
   const [chatMeta, setChatMeta] = useState<ChatMetaItem | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading) {
@@ -81,38 +86,30 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </span>
             <button
               onClick={() => logout()}
-              className="p-2 text-neutral-400 hover:text-red-600 transition-colors"
+              className="hidden md:inline-flex p-2 text-neutral-400 hover:text-red-600 transition-colors"
             >
               <LogOut size={20} />
+            </button>
+            <button
+              onClick={() => logout()}
+              className="md:hidden text-red-600 text-sm font-medium px-2 py-2"
+            >
+              Logout
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+              className="md:hidden p-2 text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 bg-white">
+        <div className="hidden md:block border-t border-neutral-200 bg-white">
           <div className="max-w-5xl mx-auto px-4 py-3 overflow-x-auto">
-            <div className="hidden md:flex gap-2 whitespace-nowrap">
-              {navItems.map((item) => {
-                const showUnread = item.href === "/student/chat" && chatMeta?.unreadForStudent;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`inline-flex items-center px-3 py-2 rounded-2xl text-sm font-medium transition-colors ${
-                      pathname === item.href 
-                        ? "bg-neutral-900 text-white" 
-                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                    }`}
-                  >
-                    <item.icon className="w-4 h-4 mr-2" />
-                    <span className="flex items-center gap-2">
-                      {item.name}
-                      {showUnread ? <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> : null}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-            <div className="flex gap-2 whitespace-nowrap md:hidden">
+            <div className="flex gap-2 whitespace-nowrap">
               {navItems.map((item) => {
                 const showUnread = item.href === "/student/chat" && chatMeta?.unreadForStudent;
                 return (
@@ -136,6 +133,33 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </div>
           </div>
         </div>
+
+        {mobileMenuOpen && (
+          <nav className="md:hidden border-t border-neutral-200 bg-white px-4 py-3 space-y-1 animate-menu-in">
+            {navItems.map((item) => {
+              const showUnread = item.href === "/student/chat" && chatMeta?.unreadForStudent;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                    isActive
+                      ? "bg-neutral-900 text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  <span className="flex items-center gap-2">
+                    {item.name}
+                    {showUnread ? <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> : null}
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
       </nav>
 
       <main className="max-w-5xl mx-auto p-4 md:p-8">
