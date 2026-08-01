@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 import { verifyAuthenticatedRequest } from "@/lib/api-auth";
+import { notifyAllAdmins, notifyUser } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,20 @@ export async function POST(req: NextRequest) {
       },
       { merge: true }
     );
+
+    // One notification per room that refreshes on every new message, rather
+    // than piling up a separate entry for each message in a live chat.
+    const notifyPayload = {
+      type: "message" as const,
+      title: role === "student" ? "New message from a student" : "New message from your mentor",
+      body: text || undefined,
+      link: role === "student" ? "/admin/chats" : "/student/chat",
+    };
+    const notifyPromise =
+      role === "student"
+        ? notifyAllAdmins(notifyPayload, `chat_${roomId}`)
+        : notifyUser(roomId, notifyPayload, `chat_${roomId}`);
+    notifyPromise.catch((err) => console.error("Failed to fan out message notification:", err));
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

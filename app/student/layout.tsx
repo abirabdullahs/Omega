@@ -8,6 +8,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X } from "lucide-react";
 import { FullScreenLoader } from "@/components/ui/loader";
+import { NotificationBell } from "@/components/ui/notification-bell";
 
 interface ChatMetaItem {
   roomId: string;
@@ -81,6 +82,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell uid={user.uid} />
             <span className="text-xs font-medium text-neutral-500 bg-neutral-100 px-2 py-1 rounded-md">
               {userData.phone}
             </span>

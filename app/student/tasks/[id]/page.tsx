@@ -60,6 +60,21 @@ export default function StudentTaskPage() {
       
       const updatedSub = await getDoc(doc(db, "submissions", id, "entries", user.uid));
       setSubmission(updatedSub.data());
+
+      try {
+        const token = await user.getIdToken();
+        await fetch("/api/notify/submission", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            taskId: id,
+            taskTitle: task?.title || "a task",
+            studentName: userData?.name || userData?.phone || "A student",
+          }),
+        });
+      } catch (notifyErr) {
+        console.warn("Failed to notify admins of submission:", notifyErr);
+      }
     } catch (err) {
       console.error(err);
     } finally {

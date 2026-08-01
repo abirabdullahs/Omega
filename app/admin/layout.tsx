@@ -8,6 +8,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X } from "lucide-react";
 import { FullScreenLoader } from "@/components/ui/loader";
+import { NotificationBell } from "@/components/ui/notification-bell";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading, logout } = useAuth();
@@ -64,12 +65,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="md:flex">
         {/* Sidebar for desktop */}
         <aside className="hidden md:flex w-64 bg-white border-r border-neutral-200 flex-col">
-          <div className="p-6 border-b border-neutral-100">
-            <h1 className="text-xl font-bold text-neutral-900 tracking-tight flex items-center">
-              <span className="bg-amber-500 w-2 h-6 mr-2 rounded-full"></span>
-              Omega Admin
-            </h1>
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Management Portal</p>
+          <div className="p-6 border-b border-neutral-100 flex items-start justify-between gap-2">
+            <div>
+              <h1 className="text-xl font-bold text-neutral-900 tracking-tight flex items-center">
+                <span className="bg-amber-500 w-2 h-6 mr-2 rounded-full"></span>
+                Omega Admin
+              </h1>
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Management Portal</p>
+            </div>
+            <NotificationBell uid={user.uid} />
           </div>
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => {
@@ -113,6 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <p className="text-xs text-neutral-500">Management Portal</p>
               </div>
               <div className="flex items-center gap-1">
+                <NotificationBell uid={user.uid} />
                 <button
                   onClick={() => logout()}
                   className="text-red-600 text-sm font-medium px-2 py-2"

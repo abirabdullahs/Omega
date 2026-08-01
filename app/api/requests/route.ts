@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
+import { notifyAllAdmins } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,13 @@ export async function POST(req: NextRequest) {
           userName: userName || data.userName || null,
           userPhone: userPhone || data.userPhone || null,
         });
+
+        notifyAllAdmins({
+          type: "request",
+          title: `${userName || data.userName || "A student"} updated their chapter request`,
+          link: "/admin/requests",
+        }, `request_${docSnap.id}`).catch((err) => console.error("Failed to fan out request notification:", err));
+
         return NextResponse.json({ success: true, updated: true, id: docSnap.id });
       }
     }
@@ -62,6 +70,12 @@ export async function POST(req: NextRequest) {
       status: "pending",
       createdAt: Date.now(),
     });
+
+    notifyAllAdmins({
+      type: "request",
+      title: `${userName || "A student"} sent a chapter request`,
+      link: "/admin/requests",
+    }, `request_${newDoc.id}`).catch((err) => console.error("Failed to fan out request notification:", err));
 
     return NextResponse.json({ success: true, id: newDoc.id }, { status: 201 });
   } catch (err: any) {

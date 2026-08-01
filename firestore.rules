@@ -84,6 +84,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Notifications — server (Admin SDK) is the only writer of new items;
+    // clients may only flip their own items' `read` flag.
+    match /notifications/{uid}/items/{itemId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
     // Chat meta — last message preview + unread flags per room. Only the
     // server (Admin SDK, via /api/chats/touch-meta and mark-read routes)
     // writes this; clients only ever read it for live unread indicators.

@@ -51,7 +51,7 @@ export default function AdminTasksPage() {
     if (!title || !content) return;
 
     try {
-      await addDoc(collection(db, "tasks"), {
+      const docRef = await addDoc(collection(db, "tasks"), {
         title,
         contentMarkdown: content,
         createdAt: serverTimestamp(),
@@ -65,6 +65,19 @@ export default function AdminTasksPage() {
       setShowCreate(false);
       fetchTasks();
       toast.success("Task created successfully!");
+
+      try {
+        const token = await user?.getIdToken();
+        if (token) {
+          await fetch("/api/notify/task", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title, taskId: docRef.id }),
+          });
+        }
+      } catch (notifyErr) {
+        console.warn("Failed to notify students of new task:", notifyErr);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to create task.");
