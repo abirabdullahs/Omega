@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, writeBatch, where } from 'firebase/firestore'; // where import kora hoyeche
 import { db } from '@/lib/firebase';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
@@ -22,11 +22,19 @@ export function NotificationBell({ uid }: { uid: string }) {
 
   useEffect(() => {
     if (!uid) return;
+    
+    // 2 din ager exact date/time ber kora
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+    // Query te time filter (where) add kora hoyeche
     const q = query(
       collection(db, 'notifications', uid, 'items'),
+      where('createdAt', '>=', twoDaysAgo),
       orderBy('createdAt', 'desc'),
       limit(30)
     );
+    
     const unsub = onSnapshot(
       q,
       (snap) => setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() } as NotificationItem))),
@@ -75,7 +83,8 @@ export function NotificationBell({ uid }: { uid: string }) {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white border border-neutral-100 rounded-2xl shadow-xl z-40 overflow-hidden animate-menu-in">
+          {/* Nicher line-e max-sm:... class gulo add kora hoyeche mobile-e perfect center anar jonno */}
+          <div className="absolute right-0 mt-2 w-80 max-sm:fixed max-sm:top-[70px] max-sm:inset-x-4 max-sm:w-auto bg-white border border-neutral-100 rounded-2xl shadow-xl z-40 overflow-hidden animate-menu-in">
             <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
               <p className="text-sm font-bold text-neutral-900">Notifications</p>
               {unreadCount > 0 && (
