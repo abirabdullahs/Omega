@@ -34,7 +34,8 @@ const ZOOM_SDK_VERSION = "2.18.3";
 function toDate(value: any) {
   if (!value) return null;
   if (typeof value?.toDate === "function") return value.toDate();
-  if (value?.seconds) return new Date(value.seconds * 1000);
+  if (typeof value?.seconds === "number") return new Date(value.seconds * 1000);
+  if (typeof value?._seconds === "number") return new Date(value._seconds * 1000);
   if (typeof value === "string" || typeof value === "number") return new Date(value);
   return null;
 }
