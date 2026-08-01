@@ -91,6 +91,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Live sessions collection
+    match /liveSessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Attendance collection
+    match /attendance/{attendanceId} {
+      allow read: if isAdmin() || (isStudent() && request.auth.uid == resource.data.studentId);
+      allow create, update, delete: if false;
+    }
+
     // Notifications — server (Admin SDK) is the only writer of new items;
     // clients may only flip their own items' `read` flag.
     match /notifications/{uid}/items/{itemId} {

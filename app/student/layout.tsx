@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X, CheckCircle2 } from "lucide-react";
+import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X, CheckCircle2, CalendarDays } from "lucide-react";
 import { FullScreenLoader } from "@/components/ui/loader";
 import { NotificationBell } from "@/components/ui/notification-bell";
 
@@ -61,6 +61,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   const navItems = [
     { name: "My Tasks", href: "/student", icon: BookOpen },
+    { name: "Live Sessions", href: "/student/live-sessions", icon: CalendarDays },
     { name: "My Submissions", href: "/student/submissions", icon: CheckCircle2 },
     { name: "Live Chat", href: "/student/chat", icon: MessageSquare },
     { name: "Course Plan", href: "/student/plan", icon: Layout },
