@@ -90,6 +90,7 @@ export default function AdminLiveSessionsPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [meetingConfig, setMeetingConfig] = useState<ZoomSdkMeetingConfig | null>(null);
   const [sdkLoading, setSdkLoading] = useState(false);
+  const [zoomConnectLoading, setZoomConnectLoading] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [form, setForm] = useState({
@@ -130,6 +131,32 @@ export default function AdminLiveSessionsPage() {
     };
     load();
   }, [fetchSessions]);
+
+  const handleZoomConnect = async () => {
+    if (!user) return;
+    setZoomConnectLoading(true);
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/zoom/connect", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to start Zoom connect flow.");
+      }
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error("Zoom authorization URL was not returned.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to connect Zoom.");
+    } finally {
+      setZoomConnectLoading(false);
+    }
+  };
 
   const resetForm = () => {
     setEditingSession(null);
@@ -431,16 +458,28 @@ export default function AdminLiveSessionsPage() {
           <h2 className="text-2xl font-bold text-neutral-900">Live Sessions</h2>
           <p className="text-neutral-500">Create, manage, and monitor Zoom-powered live classes from the admin portal.</p>
         </div>
-        <button
-          onClick={() => {
-            setShowCreate((value) => !value);
-            if (showCreate) resetForm();
-          }}
-          className="inline-flex items-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          {showCreate ? "Close Form" : "New Live Session"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleZoomConnect}
+            disabled={!user || zoomConnectLoading}
+            className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-900 hover:border-neutral-300 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Clock className="w-4 h-4" />
+            {zoomConnectLoading ? "Connecting Zoom..." : "Connect Zoom Account"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreate((value) => !value);
+              if (showCreate) resetForm();
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {showCreate ? "Close Form" : "New Live Session"}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
