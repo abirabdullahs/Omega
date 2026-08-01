@@ -145,10 +145,26 @@ export async function DELETE(req: NextRequest, ctx: any) {
       return NextResponse.json({ error: "Live session not found." }, { status: 404 });
     }
 
-    await sessionRef.update({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() });
+    const existingSession: any = snapshot.data();
+    if (existingSession?.zoomMeetingInternalId) {
+      try {
+        await endZoomMeeting(existingSession.zoomMeetingInternalId);
+      } catch (zoomError: any) {
+        console.warn("Zoom end meeting on delete failed:", zoomError?.message || zoomError);
+      }
+    }
+
+    const attendanceSnapshot = await db.collection("attendance").where("sessionId", "==", sessionId).get();
+    if (!attendanceSnapshot.empty) {
+      const batch = db.batch();
+      attendanceSnapshot.docs.forEach((doc: any) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    await sessionRef.delete();
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error("Error cancelling live session:", err);
-    return NextResponse.json({ error: err?.message || "Failed to cancel live session", details: getAdminInitError() || undefined }, { status: 500 });
+    console.error("Error deleting live session:", err);
+    return NextResponse.json({ error: err?.message || "Failed to delete live session", details: getAdminInitError() || undefined }, { status: 500 });
   }
 }

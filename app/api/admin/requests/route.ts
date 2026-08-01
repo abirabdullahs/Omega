@@ -56,6 +56,12 @@ export async function POST(req: NextRequest) {
     const reqData: any = reqDoc.data();
     const userId = reqData.userId;
 
+    // Assigning with nothing selected is a valid "close without changes" —
+    // skip touching assignments or the request's status/chapters entirely.
+    if (items.length === 0) {
+      return NextResponse.json({ success: true, noChanges: true });
+    }
+
     // Normalize items: ensure deadlineMillis present
     const newItems = items.map((it: any) => ({
       chapterId: it.chapterId,
