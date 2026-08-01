@@ -20,6 +20,16 @@ interface LiveSession {
   zoomJoinUrl?: string;
 }
 
+interface ZoomSdkMeetingConfig {
+  meetingNumber: string;
+  password: string;
+  sdkKey: string;
+  signature: string;
+  topic: string;
+}
+
+const ZOOM_SDK_VERSION = "2.18.3";
+
 function toDate(value: any) {
   if (!value) return null;
   if (typeof value?.toDate === "function") return value.toDate();
@@ -62,11 +72,14 @@ function getCountdown(session: LiveSession) {
 }
 
 export default function StudentLiveSessionsPage() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const toast = useToast();
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [meetingConfig, setMeetingConfig] = useState<ZoomSdkMeetingConfig | null>(null);
+  const [sdkLoading, setSdkLoading] = useState(false);
+  const [sdkError, setSdkError] = useState<string | null>(null);
 
   const fetchSessions = async () => {
     if (!user) {
@@ -100,6 +113,115 @@ export default function StudentLiveSessionsPage() {
     return () => window.clearInterval(interval);
   }, [user]);
 
+  useEffect(() => {
+    if (!meetingConfig || !user) return;
+
+    let client: any;
+    let isActive = true;
+
+    const loadZoomStyles = () => {
+      const root = document.head;
+      const baseUrl = `https://source.zoom.us/${ZOOM_SDK_VERSION}`;
+      const existingBootstrap = root.querySelector('link[data-zoom-sdk="bootstrap"]');
+      const existingReactSelect = root.querySelector('link[data-zoom-sdk="react-select"]');
+
+      if (!existingBootstrap) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = `${baseUrl}/css/bootstrap.css`;
+        link.dataset.zoomSdk = "bootstrap";
+        root.appendChild(link);
+      }
+
+      if (!existingReactSelect) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = `${baseUrl}/css/react-select.css`;
+        link.dataset.zoomSdk = "react-select";
+        root.appendChild(link);
+      }
+    };
+
+    const joinLiveSession = async () => {
+      setSdkError(null);
+      setSdkLoading(true);
+
+      try {
+        loadZoomStyles();
+        const module = await import("@zoomus/websdk/embedded");
+        const ZoomMtgEmbedded = (module as any).default || module;
+        client = ZoomMtgEmbedded.createClient();
+
+        const meetingRoot = document.getElementById("zoomSDKElement");
+        if (!meetingRoot) throw new Error("Unable to find Zoom meeting root container.");
+
+        client.init({
+          zoomAppRoot: meetingRoot,
+          language: "en-US",
+          leaveUrl: `${window.location.origin}/student/live-sessions`,
+          disableInvite: true,
+          disableCallOut: true,
+          disableRecord: true,
+          disableJoinAudio: false,
+          showMeetingHeader: true,
+          isSupportAV: true,
+          success: () => {
+            if (!isActive) return;
+            setSdkLoading(false);
+          },
+          error: (error: any) => {
+            if (!isActive) return;
+            console.error("Zoom SDK init failed", error);
+            setSdkError(String(error));
+            setSdkLoading(false);
+          },
+        });
+
+        client.join({
+          sdkKey: meetingConfig.sdkKey,
+          signature: meetingConfig.signature,
+          meetingNumber: meetingConfig.meetingNumber,
+          password: meetingConfig.password || "",
+          userName: userData?.name || user?.displayName || "Student",
+          userEmail: user?.email || "",
+          success: () => {
+            if (!isActive) return;
+            setSdkLoading(false);
+          },
+          error: (error: any) => {
+            if (!isActive) return;
+            console.error("Zoom SDK join failed", error);
+            setSdkError(String(error));
+            setSdkLoading(false);
+          },
+        });
+
+        if (isActive) {
+          setSdkLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Zoom SDK error", err);
+        if (isActive) {
+          setSdkError(err?.message || "Unable to start Zoom meeting.");
+          setSdkLoading(false);
+        }
+      }
+    };
+
+    joinLiveSession();
+
+    return () => {
+      isActive = false;
+      if (client?.leaveMeeting) {
+        try {
+          client.leaveMeeting();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    };
+  }, [meetingConfig, user, userData]);
+
   const nearestSession = useMemo(() => {
     const valid = sessions
       .filter((session) => getSessionStatus(session) !== "Cancelled")
@@ -110,6 +232,10 @@ export default function StudentLiveSessionsPage() {
   const handleJoin = async (session: LiveSession) => {
     if (!user) return;
     setActiveSessionId(session.id);
+    setSdkError(null);
+    setMeetingConfig(null);
+    setSdkLoading(true);
+
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/live-sessions/join", {
@@ -121,11 +247,26 @@ export default function StudentLiveSessionsPage() {
       if (!res.ok) {
         throw new Error(data?.error || "Unable to join live session.");
       }
-      window.open(data.meetingUrl, "_blank");
-      toast.success("Joining live session...");
+
+      if (data.meetingNumber && data.signature && data.sdkKey) {
+        setMeetingConfig({
+          meetingNumber: data.meetingNumber,
+          password: data.password || "",
+          sdkKey: data.sdkKey,
+          signature: data.signature,
+          topic: data.topic || session.title || session.topic || "Live session",
+        });
+        toast.success("Joining live session in the browser...");
+      } else if (data.meetingUrl) {
+        window.open(data.meetingUrl, "_blank");
+        toast.success("Joining live session...");
+      } else {
+        throw new Error("Meeting details are not available.");
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Unable to join the session.");
+      setSdkLoading(false);
     } finally {
       setActiveSessionId(null);
     }
@@ -169,6 +310,32 @@ export default function StudentLiveSessionsPage() {
           </div>
         </div>
       </div>
+
+      {meetingConfig ? (
+        <div className="rounded-3xl border border-neutral-100 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-neutral-500">Zoom in-browser session</p>
+              <h3 className="mt-1 text-xl font-semibold text-neutral-900">{meetingConfig.topic}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMeetingConfig(null);
+                setSdkError(null);
+                setSdkLoading(false);
+              }}
+              className="inline-flex items-center rounded-2xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors"
+            >
+              Leave session
+            </button>
+          </div>
+
+          <div id="zoomSDKElement" className="min-h-[520px] rounded-3xl bg-black" />
+          {sdkLoading ? <p className="mt-4 text-sm text-neutral-500">Loading Zoom meeting…</p> : null}
+          {sdkError ? <p className="mt-4 text-sm text-red-600">{sdkError}</p> : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-6">
         {loading ? (
