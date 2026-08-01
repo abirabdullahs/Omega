@@ -20,9 +20,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch tasks
-    const tasksSnap = await db.collection("tasks").get();
-    const tasks = tasksSnap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) }));
+    const { searchParams } = new URL(req.url);
+    const taskId = searchParams.get("taskId") || "";
+
+    if (!taskId) {
+      // No task selected — return nothing yet. The client fetches the task
+      // list itself (cheap, direct Firestore read); this route only ever
+      // reads submissions for one task at a time so it doesn't scan every
+      // task's entries subcollection on every page load.
+      return NextResponse.json({ items: [] });
+    }
+
+    const taskDoc = await db.collection("tasks").doc(taskId).get();
+    if (!taskDoc.exists) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+    const taskTitle = (taskDoc.data() || {}).title || "";
 
     // Fetch students (only those with role=student)
     const studentsSnap = await db.collection("users").where("role", "==", "student").get();
@@ -32,30 +45,23 @@ export async function GET(req: NextRequest) {
       studentMap[d.id] = data.name || data.phone || "";
     });
 
-    // Collect submissions across tasks
     const allSubmissions: any[] = [];
-    for (const task of tasks) {
-      try {
-        const entriesSnap = await db.collection("submissions").doc(task.id).collection("entries").get();
-        entriesSnap.docs.forEach((entry: any) => {
-          const data = entry.data() || {};
-          allSubmissions.push({
-            id: entry.id,
-            taskId: task.id,
-            taskTitle: task.title || "",
-            studentId: data.studentId,
-            studentPhone: data.studentPhone || "",
-            studentName: studentMap[data.studentId] || null,
-            text: data.text || "",
-            submittedAt: data.submittedAt || null,
-            grade: data.grade || null,
-            feedback: data.feedback || null,
-          });
-        });
-      } catch (err: any) {
-        console.warn("Error reading entries for task", task.id, (err as any)?.message || String(err));
-      }
-    }
+    const entriesSnap = await db.collection("submissions").doc(taskId).collection("entries").get();
+    entriesSnap.docs.forEach((entry: any) => {
+      const data = entry.data() || {};
+      allSubmissions.push({
+        id: entry.id,
+        taskId,
+        taskTitle,
+        studentId: data.studentId,
+        studentPhone: data.studentPhone || "",
+        studentName: studentMap[data.studentId] || null,
+        text: data.text || "",
+        submittedAt: data.submittedAt || null,
+        grade: data.grade || null,
+        feedback: data.feedback || null,
+      });
+    });
 
     // sort by submittedAt desc (handle timestamp or number)
     allSubmissions.sort((a, b) => {

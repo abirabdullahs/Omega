@@ -1,16 +1,25 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { collection, query, orderBy, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@/lib/utils";
-import { CheckCircle2, Clock, User, FileText, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
+import { Loader } from "@/components/ui/loader";
+import { Clock, User, FileText, Search, Trash2, X, ListFilter } from "lucide-react";
+
+interface TaskOption {
+  id: string;
+  title: string;
+}
 
 interface Submission {
   id: string;
   taskId: string;
   taskTitle: string;
   studentId: string;
+  studentName?: string | null;
   studentPhone: string;
   text: string;
   submittedAt: any;
@@ -19,8 +28,14 @@ interface Submission {
 }
 
 export default function AdminSubmissionsPage() {
+  const [tasks, setTasks] = useState<TaskOption[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [selectedTaskId, setSelectedTaskId] = useState<string>("");
+
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [grade, setGrade] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -30,27 +45,78 @@ export default function AdminSubmissionsPage() {
   const { user } = useAuth();
   const toast = useToast();
 
-  const fetchSubmissions = async () => {
+  // Task list is a single cheap Firestore read — used to populate the
+  // filter dropdown. Submissions themselves are only ever fetched for one
+  // selected task at a time (see fetchSubmissions), instead of scanning
+  // every task's entries on every page load.
+  useEffect(() => {
+    async function fetchTasks() {
+      try {
+        const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+        setTasks(snap.docs.map((d) => ({ id: d.id, title: (d.data() as any).title || "Untitled task" })));
+      } catch (err) {
+        console.error("Error fetching tasks:", err);
+      } finally {
+        setTasksLoading(false);
+      }
+    }
+    fetchTasks();
+  }, []);
+
+  const fetchSubmissions = async (taskId: string) => {
+    if (!user || !taskId) return;
+    setLoading(true);
     try {
-      if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch(`${window.location.origin}/api/admin/submissions`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(
+        `${window.location.origin}/api/admin/submissions?taskId=${encodeURIComponent(taskId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const data = await res.json().catch(() => null);
       if (res.ok && Array.isArray(data?.items)) {
         setSubmissions(data.items);
       } else {
         console.error('Submissions API error:', data);
+        toast.error(data?.error || "Failed to load submissions.");
       }
     } catch (err) {
       console.error(err);
+      toast.error("Failed to load submissions.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSubmissions();
-  }, [user?.uid]);
+    if (selectedTaskId) fetchSubmissions(selectedTaskId);
+    else setSubmissions([]);
+  }, [selectedTaskId, user?.uid]);
+
+  useEffect(() => {
+    if (!selectedSub) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [selectedSub]);
+
+  const filteredSubmissions = submissions.filter((sub) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (sub.studentName || "").toLowerCase().includes(q) ||
+      (sub.studentPhone || "").toLowerCase().includes(q) ||
+      (sub.text || "").toLowerCase().includes(q)
+    );
+  });
+
+  const openGrading = (sub: Submission) => {
+    setSelectedSub(sub);
+    setGrade(sub.grade || "");
+    setFeedback(sub.feedback || "");
+  };
 
   const handleGrade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +124,6 @@ export default function AdminSubmissionsPage() {
 
     setIsGrading(true);
     try {
-      // Use admin API for grading (PATCH or POST) would be better, but for now use Admin submissions endpoint via fetch.
       const token = await user?.getIdToken();
       const res = await fetch(`${window.location.origin}/api/admin/submissions`, {
         method: "POST",
@@ -70,7 +135,7 @@ export default function AdminSubmissionsPage() {
         setSelectedSub(null);
         setGrade("");
         setFeedback("");
-        fetchSubmissions();
+        if (selectedTaskId) fetchSubmissions(selectedTaskId);
         toast.success("Grade saved.");
       } else {
         console.error('Grading API error:', data);
@@ -85,7 +150,7 @@ export default function AdminSubmissionsPage() {
   };
 
   const handleRemove = async (sub: Submission) => {
-    if (!confirm(`Remove ${(sub as any).studentName || sub.studentPhone || "this student"}'s submission for "${sub.taskTitle}"? This cannot be undone.`)) return;
+    if (!confirm(`Remove ${sub.studentName || sub.studentPhone || "this student"}'s submission for "${sub.taskTitle}"? This cannot be undone.`)) return;
     setRemovingId(sub.id);
     try {
       const token = await user?.getIdToken();
@@ -114,31 +179,58 @@ export default function AdminSubmissionsPage() {
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold text-neutral-900">Student Submissions</h2>
-        <p className="text-neutral-500 text-sm">Review and grade completed tasks.</p>
+        <p className="text-neutral-500 text-sm">Pick a task to review and grade its submissions.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* List */}
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="relative">
+          <ListFilter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <select
+            value={selectedTaskId}
+            onChange={(e) => setSelectedTaskId(e.target.value)}
+            disabled={tasksLoading}
+            className="w-full appearance-none rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm font-medium text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100 disabled:opacity-50"
+          >
+            <option value="">{tasksLoading ? "Loading tasks…" : "Select a task…"}</option>
+            {tasks.map((t) => (
+              <option key={t.id} value={t.id}>{t.title}</option>
+            ))}
+          </select>
+        </div>
+
+        {selectedTaskId && (
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search student or answer…"
+              className="w-full sm:w-64 rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100"
+            />
+          </div>
+        )}
+      </div>
+
+      {!selectedTaskId ? (
+        <div className="py-20 text-center text-neutral-400 bg-white rounded-2xl border border-dashed border-neutral-200">
+          <FileText size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="font-medium">Select a task above to load its submissions.</p>
+        </div>
+      ) : loading ? (
+        <div className="py-20">
+          <Loader label="Loading submissions…" className="text-neutral-900" />
+        </div>
+      ) : filteredSubmissions.length === 0 ? (
+        <div className="py-20 text-center text-neutral-400 bg-white rounded-2xl border border-neutral-100">
+          {submissions.length === 0 ? "No submissions for this task yet." : "No submissions match your search."}
+        </div>
+      ) : (
         <div className="space-y-4">
-          {loading ? (
-            <div className="py-20 text-center text-neutral-400">Loading submissions...</div>
-          ) : submissions.length === 0 ? (
-            <div className="py-20 text-center text-neutral-400 bg-white rounded-2xl border border-neutral-100">
-              No submissions found.
-            </div>
-          ) : submissions.map((sub) => (
+          {filteredSubmissions.map((sub) => (
             <div
-              key={`${sub.taskId}-${sub.studentId}`}
-              onClick={() => {
-                setSelectedSub(sub);
-                setGrade(sub.grade || "");
-                setFeedback(sub.feedback || "");
-              }}
-              className={`w-full text-left bg-white p-5 rounded-2xl border transition-all cursor-pointer ${
-                selectedSub?.taskId === sub.taskId && selectedSub?.studentId === sub.studentId
-                  ? "border-neutral-900 ring-1 ring-neutral-900 shadow-md"
-                  : "border-neutral-100 hover:border-neutral-200"
-              }`}
+              key={sub.id}
+              onClick={() => openGrading(sub)}
+              className="w-full text-left bg-white p-5 rounded-2xl border border-neutral-100 hover:border-neutral-300 transition-all cursor-pointer"
             >
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center space-x-2">
@@ -146,7 +238,7 @@ export default function AdminSubmissionsPage() {
                     <User size={16} className="text-neutral-900" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-neutral-900">{(sub as any).studentName || sub.studentPhone || "Student"}</p>
+                    <p className="text-sm font-bold text-neutral-900">{sub.studentName || sub.studentPhone || "Student"}</p>
                     <p className="text-[10px] text-neutral-400 uppercase tracking-wider font-medium">{sub.taskTitle}</p>
                   </div>
                 </div>
@@ -178,84 +270,93 @@ export default function AdminSubmissionsPage() {
             </div>
           ))}
         </div>
+      )}
 
-        {/* Grading Panel */}
-        <div>
-          {selectedSub ? (
-            <div className="bg-white p-8 rounded-3xl border border-neutral-100 shadow-sm sticky top-8">
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-neutral-900 mb-1">Grade Submission</h3>
-                <p className="text-sm text-neutral-500">Reviewing task for student {(selectedSub as any).studentName || selectedSub.studentPhone}</p>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Student&apos;s Answer</label>
-                  <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 text-sm text-neutral-700 whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {selectedSub.text}
-                  </div>
-                </div>
-
-                <form onSubmit={handleGrade} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">Grade</label>
-                      <select
-                        required
-                        value={grade}
-                        onChange={(e) => setGrade(e.target.value)}
-                        className="w-full px-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900"
-                      >
-                        <option value="">Select Grade</option>
-                        <option value="A+">A+</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="F">F</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">Feedback</label>
-                    <textarea
-                      rows={4}
-                      value={feedback}
-                      onChange={(e) => setFeedback(e.target.value)}
-                      className="w-full px-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900"
-                      placeholder="Excellent work! Consider focusing on..."
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isGrading}
-                    className="w-full bg-neutral-900 text-white py-3 rounded-2xl font-bold hover:bg-neutral-800 disabled:opacity-50 transition-all shadow-sm"
-                  >
-                    {isGrading ? "Saving..." : "Submit Grade & Feedback"}
-                  </button>
-                </form>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemove(selectedSub)}
-                  disabled={removingId === selectedSub.id}
-                  className="w-full flex items-center justify-center gap-2 text-red-600 text-sm font-bold py-2.5 rounded-2xl border border-red-100 hover:bg-red-50 transition-colors disabled:opacity-50"
-                >
-                  <Trash2 size={16} />
-                  {removingId === selectedSub.id ? "Removing…" : "Remove submission"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="h-full flex items-center justify-center border-2 border-dashed border-neutral-100 rounded-3xl text-neutral-300 p-20 text-center">
+      {/* Grading modal — opens centered over the page on any screen size,
+          so grading never requires scrolling down to find the form. */}
+      {selectedSub && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedSub(null);
+          }}
+        >
+          <div className="w-full max-w-lg my-8 sm:my-0 rounded-3xl border border-neutral-100 bg-white p-6 sm:p-8 shadow-xl max-h-[calc(100dvh-4rem)] overflow-y-auto">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <MessageSquare size={48} className="mx-auto mb-4 opacity-20" />
-                <p className="font-medium">Select a submission to start grading</p>
+                <h3 className="text-lg font-bold text-neutral-900 mb-1">Grade Submission</h3>
+                <p className="text-sm text-neutral-500">
+                  {selectedSub.studentName || selectedSub.studentPhone} — {selectedSub.taskTitle}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setSelectedSub(null)}
+                aria-label="Close"
+                className="p-2 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-xl transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Student&apos;s Answer</label>
+                <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 text-sm text-neutral-700 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                  {selectedSub.text}
+                </div>
+              </div>
+
+              <form onSubmit={handleGrade} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">Grade</label>
+                  <select
+                    required
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900"
+                  >
+                    <option value="">Select Grade</option>
+                    <option value="A+">A+</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="F">F</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">Feedback</label>
+                  <textarea
+                    rows={4}
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-neutral-900"
+                    placeholder="Excellent work! Consider focusing on..."
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isGrading}
+                  className="w-full bg-neutral-900 text-white py-3 rounded-2xl font-bold hover:bg-neutral-800 disabled:opacity-50 transition-all shadow-sm"
+                >
+                  {isGrading ? "Saving..." : "Submit Grade & Feedback"}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={() => handleRemove(selectedSub)}
+                disabled={removingId === selectedSub.id}
+                className="w-full flex items-center justify-center gap-2 text-red-600 text-sm font-bold py-2.5 rounded-2xl border border-red-100 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+                {removingId === selectedSub.id ? "Removing…" : "Remove submission"}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
