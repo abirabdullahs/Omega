@@ -1,8 +1,9 @@
 'use client';
 
+import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import ChatInterface from "@/components/chat-interface";
-import { ShieldCheck, Info } from "lucide-react";
+import { ShieldCheck, Info, ArrowLeft } from "lucide-react";
 
 export default function StudentChatPage() {
   const { user, userData } = useAuth();
@@ -11,24 +12,38 @@ export default function StudentChatPage() {
 
   return (
     <div className="space-y-8">
-      <div>
+      <div className="hidden lg:block">
         <h2 className="text-2xl font-bold text-neutral-900">Live Support</h2>
         <p className="text-neutral-500 text-sm">Direct line to Omega mentors.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          <ChatInterface 
-            roomId={user.uid} 
-            currentUser={{
-              uid: user.uid,
-              name: userData.name || userData.phone || "Student",
-              role: "student"
-            }} 
-          />
+          {/* Fixed full-screen takeover on mobile/tablet, so the on-screen
+              keyboard resizes this box instead of pushing the header off
+              the top of the page. Reverts to a normal embedded card at lg. */}
+          <div className="fixed inset-0 z-30 h-dvh flex flex-col bg-white lg:static lg:z-auto lg:h-full lg:max-h-[calc(100vh-14rem)]">
+            <Link
+              href="/student"
+              className="lg:hidden flex items-center gap-2 px-4 py-3 text-sm font-medium text-neutral-600 border-b border-neutral-100 shrink-0"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </Link>
+            <div className="flex-1 min-h-0">
+              <ChatInterface
+                roomId={user.uid}
+                currentUser={{
+                  uid: user.uid,
+                  name: userData.name || userData.phone || "Student",
+                  role: "student"
+                }}
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="hidden lg:block space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-neutral-100 shadow-sm space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-widest text-neutral-400 flex items-center">
               <ShieldCheck className="w-4 h-4 mr-2" />

@@ -160,7 +160,7 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
   };
 
   return (
-    <div className="relative flex flex-col h-full max-h-[calc(100vh-14rem)] bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+    <div className="relative flex flex-col h-full bg-white md:rounded-3xl md:border md:border-neutral-100 md:shadow-sm overflow-hidden">
       <div className="sticky top-0 z-20 p-4 border-b border-neutral-100 bg-white/95 backdrop-blur-sm flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-neutral-900 rounded-full flex items-center justify-center">

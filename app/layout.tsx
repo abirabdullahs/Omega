@@ -1,4 +1,4 @@
-import type {Metadata} from 'next';
+import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import { AuthProvider } from '@/components/auth-provider';
 import { ToastProvider } from '@/components/ui/toast-provider';
@@ -13,6 +13,16 @@ export const metadata: Metadata = {
     shortcut: '/favicon.svg',
     apple: '/favicon.svg',
   },
+};
+
+// resizes-content makes the on-screen keyboard actually shrink the visual
+// viewport (and therefore dvh units) instead of floating over the page.
+// This is what keeps the chat header/input pinned in place instead of
+// getting pushed off-screen when a mobile keyboard opens.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  interactiveWidget: 'resizes-content',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {

@@ -148,10 +148,13 @@ export default function AdminChatDashboard() {
         {/* Chat Area — hidden on mobile until a student is selected, then takes the full screen */}
         <div className={`flex-1 min-h-0 ${selectedStudent ? 'block' : 'hidden md:block'} ${sidebarOpen ? '' : 'pl-2'}`}>
           {selectedStudent ? (
-            <div className="h-full flex flex-col">
+            /* Fixed full-screen takeover on mobile, so the on-screen keyboard
+               resizes this box instead of pushing the header off the top of
+               the page. Reverts to the normal embedded panel at md. */
+            <div className="fixed inset-0 z-30 h-dvh flex flex-col bg-white md:static md:z-auto md:h-full">
               <button
                 onClick={() => setSelectedStudent(null)}
-                className="md:hidden flex items-center gap-2 px-4 py-3 mb-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 bg-white rounded-2xl border border-neutral-100 shadow-sm shrink-0"
+                className="md:hidden flex items-center gap-2 px-4 py-3 text-sm font-medium text-neutral-600 border-b border-neutral-100 shrink-0"
               >
                 <ArrowLeft size={16} />
                 Back to students
