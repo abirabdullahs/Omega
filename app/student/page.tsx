@@ -74,161 +74,103 @@ function getAssignmentItems(assignment: Assignment): AssignmentItem[] {
   return [];
 }
 
-function CountdownTimer({
-  deadline,
-  createdAt,
-}: {
-  deadline: any;
-  createdAt?: any;
-}) {
-  const [timeLeft, setTimeLeft] = useState("...");
+function getTimestampMilliseconds(timestamp: any): number {
+  if (!timestamp) return 0;
+
+  if (typeof timestamp?.toMillis === "function") {
+    return timestamp.toMillis();
+  }
+
+  if (timestamp?.seconds) {
+    return timestamp.seconds * 1000;
+  }
+
+  return new Date(timestamp).getTime();
+}
+
+function padTime(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/**
+ * Countdown updates only in the browser every second.
+ * It does NOT fetch anything from Firestore.
+ */
+function TaskCountdown({ deadline }: { deadline: any }) {
+  const [timeText, setTimeText] = useState("00 : 00 : 00");
   const [isExpired, setIsExpired] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [urgency, setUrgency] = useState<"normal" | "soon" | "urgent">(
-    "normal"
-  );
+  const [isUrgent, setIsUrgent] = useState(false);
 
   useEffect(() => {
     if (!deadline) return;
 
-    const targetTime = deadline?.toMillis
-      ? deadline.toMillis()
-      : deadline?.seconds
-        ? deadline.seconds * 1000
-        : new Date(deadline).getTime();
+    const targetTime = getTimestampMilliseconds(deadline);
 
-    const fallbackStart = Date.now() - 86400000;
+    const updateCountdown = () => {
+      const difference = targetTime - Date.now();
 
-    const startTime = createdAt?.toMillis
-      ? createdAt.toMillis()
-      : createdAt?.seconds
-        ? createdAt.seconds * 1000
-        : new Date(createdAt).getTime() || fallbackStart;
-
-    const totalDuration = Math.max(targetTime - startTime, 1);
-
-    const updateTimer = () => {
-      const now = Date.now();
-      const diff = targetTime - now;
-
-      if (diff <= 0) {
-        setTimeLeft("Expired");
+      if (difference <= 0) {
+        setTimeText("00 : 00 : 00");
         setIsExpired(true);
-        setProgress(100);
+        setIsUrgent(false);
         return;
       }
 
       setIsExpired(false);
 
-      const elapsed = Math.max(now - startTime, 0);
-      const currentProgress = Math.min((elapsed / totalDuration) * 100, 100);
+      // Total hours keeps the format consistent even after 24 hours.
+      const totalHours = Math.floor(difference / (1000 * 60 * 60));
+      const minutes = Math.floor(
+        (difference % (1000 * 60 * 60)) / (1000 * 60)
+      );
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
 
-      setProgress(currentProgress);
+      setTimeText(
+        `${padTime(totalHours)} : ${padTime(minutes)} : ${padTime(seconds)}`
+      );
 
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((diff / (1000 * 60)) % 60);
-
-      if (days > 0) {
-        setTimeLeft(`${days}d ${hours}h`);
-        setUrgency(days <= 1 ? "urgent" : days <= 3 ? "soon" : "normal");
-      } else if (hours > 0) {
-        setTimeLeft(`${hours}h ${minutes}m`);
-        setUrgency(hours <= 6 ? "urgent" : "soon");
-      } else {
-        setTimeLeft(`${minutes}m`);
-        setUrgency("urgent");
-      }
+      // Orange when less than 24 hours remain.
+      setIsUrgent(difference <= 24 * 60 * 60 * 1000);
     };
 
-    updateTimer();
+    updateCountdown();
 
-    const intervalId = setInterval(updateTimer, 1000);
+    // Only local JavaScript timer; no Firestore call here.
+    const intervalId = window.setInterval(updateCountdown, 1000);
 
-    return () => clearInterval(intervalId);
-  }, [deadline, createdAt]);
+    return () => window.clearInterval(intervalId);
+  }, [deadline]);
 
-  if (!deadline) return null;
+  const colorClass = isExpired
+    ? "border-rose-200 bg-rose-50 text-rose-600"
+    : isUrgent
+      ? "border-orange-200 bg-orange-50 text-orange-600"
+      : "border-violet-100 bg-violet-50 text-violet-700";
 
-  const radius = 18;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-  const styles = isExpired
-    ? {
-        wrapper: "border-rose-100 bg-rose-50",
-        ring: "text-rose-500",
-        label: "text-rose-500",
-        value: "text-rose-700",
-      }
-    : urgency === "urgent"
-      ? {
-          wrapper: "border-orange-100 bg-orange-50",
-          ring: "text-orange-500",
-          label: "text-orange-500",
-          value: "text-orange-700",
-        }
-      : urgency === "soon"
-        ? {
-            wrapper: "border-amber-100 bg-amber-50",
-            ring: "text-amber-500",
-            label: "text-amber-600",
-            value: "text-amber-800",
-          }
-        : {
-            wrapper: "border-neutral-200 bg-neutral-50",
-            ring: "text-blue-500",
-            label: "text-neutral-400",
-            value: "text-neutral-800",
-          };
+  const iconBgClass = isExpired
+    ? "bg-rose-100 text-rose-600"
+    : isUrgent
+      ? "bg-orange-100 text-orange-600"
+      : "bg-violet-100 text-violet-600";
 
   return (
     <div
-      className={`flex min-w-[145px] items-center gap-3 rounded-2xl border px-3 py-2.5 ${styles.wrapper}`}
+      className={`inline-flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${colorClass}`}
     >
       <div
-        className={`relative flex h-11 w-11 shrink-0 items-center justify-center ${styles.ring}`}
+        className={`flex h-6 w-6 items-center justify-center rounded-lg ${iconBgClass}`}
       >
-        <svg className="h-full w-full -rotate-90">
-          <circle
-            cx="22"
-            cy="22"
-            r={radius}
-            stroke="currentColor"
-            strokeWidth="3.5"
-            fill="transparent"
-            className="opacity-15"
-          />
-
-          <circle
-            cx="22"
-            cy="22"
-            r={radius}
-            stroke="currentColor"
-            strokeWidth="3.5"
-            fill="transparent"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className="transition-all duration-1000 ease-linear"
-          />
-        </svg>
-
-        <Clock size={15} className="absolute" strokeWidth={2.5} />
+        <Clock size={13} strokeWidth={2.5} />
       </div>
 
-      <div className="min-w-0">
-        <p
-          className={`text-[10px] font-bold uppercase tracking-[0.12em] ${styles.label}`}
-        >
-          {isExpired ? "Deadline passed" : "Due in"}
-        </p>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-[12px] font-black tracking-tight tabular-nums sm:text-[13px]">
+          {timeText}
+        </span>
 
-        <p
-          className={`mt-0.5 text-sm font-black tabular-nums tracking-tight ${styles.value}`}
-        >
-          {timeLeft}
-        </p>
+        <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] opacity-75">
+          {isExpired ? "Expired" : "Left"}
+        </span>
       </div>
     </div>
   );
@@ -255,6 +197,7 @@ export default function StudentDashboard() {
       setLoading(true);
 
       try {
+        // Firestore data is fetched once when user changes / page loads.
         const assignQ = query(
           collection(db, "assignments"),
           where("userId", "==", user.uid),
@@ -271,11 +214,12 @@ export default function StudentDashboard() {
             }) as Assignment
         );
 
-        setAssignments(assignList);
-
-        const tasksSnap = await getDocs(
-          query(collection(db, "tasks"), orderBy("createdAt", "desc"))
+        const tasksQuery = query(
+          collection(db, "tasks"),
+          orderBy("createdAt", "desc")
         );
+
+        const tasksSnap = await getDocs(tasksQuery);
 
         const taskList = tasksSnap.docs.map(
           (taskDoc) =>
@@ -285,23 +229,35 @@ export default function StudentDashboard() {
             }) as Task
         );
 
-        setTasks(taskList);
+        // Submission documents are loaded once.
+        const submissionEntries = await Promise.all(
+          taskList.map(async (task) => {
+            const submissionDoc = await getDoc(
+              doc(db, "submissions", task.id, "entries", user.uid)
+            );
+
+            return {
+              taskId: task.id,
+              submission: submissionDoc.exists()
+                ? (submissionDoc.data() as Submission)
+                : null,
+            };
+          })
+        );
 
         const submissionData: Record<string, Submission> = {};
 
-        for (const task of taskList) {
-          const subDoc = await getDoc(
-            doc(db, "submissions", task.id, "entries", user.uid)
-          );
-
-          if (subDoc.exists()) {
-            submissionData[task.id] = subDoc.data() as Submission;
+        submissionEntries.forEach(({ taskId, submission }) => {
+          if (submission) {
+            submissionData[taskId] = submission;
           }
-        }
+        });
 
+        setAssignments(assignList);
+        setTasks(taskList);
         setSubmissions(submissionData);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to fetch dashboard data:", err);
       } finally {
         setLoading(false);
       }
@@ -354,15 +310,37 @@ export default function StudentDashboard() {
               <Link
                 key={task.id}
                 href={`/student/tasks/${task.id}`}
-                className="group relative flex flex-col gap-5 overflow-hidden rounded-3xl border border-neutral-100 bg-white p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-xl hover:shadow-blue-500/5 md:flex-row md:items-center md:gap-6"
+                className="group relative overflow-hidden rounded-3xl border border-neutral-100 bg-white p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-violet-100 hover:shadow-xl hover:shadow-violet-500/5"
               >
-                {/* Left blue line on hover */}
-                <div className="absolute inset-y-0 left-0 w-1 bg-blue-500 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                {/* Small left accent on hover */}
+                <div className="absolute inset-y-0 left-0 w-1 bg-violet-500 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-                {/* Left Side: Task Details */}
-                <div className="flex min-w-0 flex-1 items-start gap-4">
+                {/* Top row: Countdown on the top-left */}
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  {!isDone && task.deadline ? (
+                    <TaskCountdown deadline={task.deadline} />
+                  ) : (
+                    <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100">
+                        <CheckCircle2 size={13} strokeWidth={2.5} />
+                      </div>
+
+                      <span className="text-[10px] font-extrabold uppercase tracking-[0.1em]">
+                        Completed
+                      </span>
+                    </div>
+                  )}
+
+                  <ChevronRight
+                    size={20}
+                    className="text-neutral-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-violet-600"
+                  />
+                </div>
+
+                {/* Main Task Details */}
+                <div className="flex min-w-0 items-start gap-4">
                   <div
-                    className={`mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105 ${
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105 ${
                       isDone
                         ? "bg-emerald-50 text-emerald-600"
                         : "bg-blue-50 text-blue-600"
@@ -377,12 +355,12 @@ export default function StudentDashboard() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-[17px] font-bold leading-tight text-neutral-900 transition-colors group-hover:text-blue-600">
+                      <h3 className="text-[17px] font-bold leading-tight text-neutral-900 transition-colors group-hover:text-violet-700">
                         {task.title}
                       </h3>
 
                       {!isDone && (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-600">
                           Open
                         </span>
                       )}
@@ -398,6 +376,7 @@ export default function StudentDashboard() {
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                           <CheckCircle2 size={12} />
+
                           {submission.grade
                             ? `Grade: ${submission.grade}`
                             : "Submitted"}
@@ -405,21 +384,6 @@ export default function StudentDashboard() {
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Right Side: Countdown */}
-                <div className="ml-16 flex items-center justify-between gap-4 md:ml-0 md:justify-end">
-                  {!isDone && task.deadline && (
-                    <CountdownTimer
-                      deadline={task.deadline}
-                      createdAt={task.createdAt}
-                    />
-                  )}
-
-                  <ChevronRight
-                    size={20}
-                    className="hidden text-neutral-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-neutral-900 md:block"
-                  />
                 </div>
               </Link>
             );
@@ -460,6 +424,7 @@ export default function StudentDashboard() {
                   <p className="mb-1 text-xs font-bold uppercase tracking-widest text-neutral-400">
                     Your Running Goal
                   </p>
+
                   <h3 className="text-2xl font-bold">
                     This Week&apos;s Focus
                   </h3>
