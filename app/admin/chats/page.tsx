@@ -175,7 +175,9 @@ export default function AdminChatDashboard() {
                     uid: user.uid,
                     name: userData.name || "Admin",
                     role: "admin"
-                  }} 
+                  }}
+                  headerTitle={selectedStudent.name || selectedStudent.phone}
+                  headerSubtitle={selectedStudent.name ? selectedStudent.phone : "Student"}
                 />
               </div>
             </div>

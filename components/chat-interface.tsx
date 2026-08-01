@@ -21,9 +21,11 @@ interface ChatInterfaceProps {
     name: string;
     role: string;
   };
+  headerTitle?: string;
+  headerSubtitle?: string;
 }
 
-export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProps) {
+export default function ChatInterface({ roomId, currentUser, headerTitle, headerSubtitle }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
@@ -177,12 +179,16 @@ export default function ChatInterface({ roomId, currentUser }: ChatInterfaceProp
     <div className="relative flex flex-col h-full bg-white md:rounded-3xl md:border md:border-neutral-100 md:shadow-sm overflow-hidden">
       <div className="sticky top-0 z-20 p-4 border-b border-neutral-100 bg-white/95 backdrop-blur-sm flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-neutral-900 rounded-full flex items-center justify-center">
-            <User size={16} className="text-white" />
+          <div className="w-8 h-8 bg-neutral-900 rounded-full flex items-center justify-center shrink-0">
+            {headerTitle ? (
+              <span className="text-white text-xs font-bold">{headerTitle.trim().charAt(0).toUpperCase()}</span>
+            ) : (
+              <User size={16} className="text-white" />
+            )}
           </div>
           <div>
-            <p className="text-xs font-bold text-neutral-900">Live Support</p>
-            <p className="text-[10px] text-neutral-500 font-medium">Messenger</p>
+            <p className="text-xs font-bold text-neutral-900">{headerTitle || "Live Support"}</p>
+            <p className="text-[10px] text-neutral-500 font-medium">{headerSubtitle || "Messenger"}</p>
           </div>
         </div>
         {/* Admin controls */}

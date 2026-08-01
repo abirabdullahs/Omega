@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { Loader } from "@/components/ui/loader";
 
 export default function RootPage() {
   const { user, userData, loading } = useAuth();
@@ -24,9 +25,9 @@ export default function RootPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-900 text-white">
-      <div className="flex flex-col items-center space-y-4">
-        <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex flex-col items-center space-y-5">
         <h1 className="text-xl font-bold tracking-widest uppercase">Omega</h1>
+        <Loader />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BookOpen, Bell, LogOut, Layout, MessageSquare, Menu, X } from "lucide-react";
+import { FullScreenLoader } from "@/components/ui/loader";
 
 interface ChatMetaItem {
   roomId: string;
@@ -54,11 +55,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   }, [user?.uid]);
 
   if (loading || !user || userData?.role !== "student" || userData.passwordChanged === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900"></div>
-      </div>
-    );
+    return <FullScreenLoader label="Loading your dashboard…" />;
   }
 
   const navItems = [

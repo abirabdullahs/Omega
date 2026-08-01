@@ -7,6 +7,7 @@ import Link from "next/link";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { LayoutDashboard, Users, BookOpen, MessageSquare, Bell, LogOut, Clock, Menu, X } from "lucide-react";
+import { FullScreenLoader } from "@/components/ui/loader";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, userData, loading, logout } = useAuth();
@@ -44,11 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [user, userData, loading, router]);
 
   if (loading || !user || userData?.role !== "admin" || userData.passwordChanged === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900"></div>
-      </div>
-    );
+    return <FullScreenLoader label="Loading admin portal…" />;
   }
 
   const navItems = [

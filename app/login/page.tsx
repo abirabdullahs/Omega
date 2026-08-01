@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { formatPhoneToEmail } from "@/lib/auth-utils";
 import { LogIn, Lock, Phone } from "lucide-react";
+import { FullScreenLoader } from "@/components/ui/loader";
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -99,11 +100,7 @@ export default function LoginPage() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-50">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900"></div>
-    </div>
-  );
+  if (loading) return <FullScreenLoader />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 px-4">
