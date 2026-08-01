@@ -56,7 +56,7 @@ function getAssignmentItems(assignment: Assignment): AssignmentItem[] {
   return [];
 }
 
-// Sub-component for Live Countdown with Seconds & Circular Progress
+// Beautiful Live Countdown Component
 function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: any }) {
   const [timeLeft, setTimeLeft] = useState<string>("Calculating...");
   const [isExpired, setIsExpired] = useState(false);
@@ -65,14 +65,13 @@ function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: an
   useEffect(() => {
     if (!deadline) return;
 
-    // Convert Firestore Timestamps to milliseconds safely
     const targetTime = deadline?.toMillis 
       ? deadline.toMillis() 
       : (deadline?.seconds * 1000 || new Date(deadline).getTime());
 
     const startTime = createdAt?.toMillis 
       ? createdAt.toMillis() 
-      : (createdAt?.seconds * 1000 || new Date(createdAt).getTime() || (Date.now() - 86400000)); // Default fallback if no creation date
+      : (createdAt?.seconds * 1000 || new Date(createdAt).getTime() || (Date.now() - 86400000));
 
     const totalDuration = targetTime - startTime;
 
@@ -87,7 +86,6 @@ function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: an
         return;
       }
 
-      // Calculate progress percentage for the circular ring
       const elapsed = now - startTime;
       let currentProgress = (elapsed / totalDuration) * 100;
       if (currentProgress < 0) currentProgress = 0;
@@ -97,46 +95,49 @@ function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: an
       const d = Math.floor(diff / (1000 * 60 * 60 * 24));
       const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
       const m = Math.floor((diff / 1000 / 60) % 60);
-      const s = Math.floor((diff / 1000) % 60); // Included Seconds
+      const s = Math.floor((diff / 1000) % 60);
 
       let timeString = "";
       if (d > 0) timeString += `${d}d `;
       if (h > 0 || d > 0) timeString += `${h}h `;
       if (m > 0 || h > 0 || d > 0) timeString += `${m}m `;
-      timeString += `${s}s`; // Always show seconds
+      timeString += `${s}s`;
 
       setTimeLeft(timeString);
     };
 
-    updateTimer(); // Initial call
-    const intervalId = setInterval(updateTimer, 1000); // Update every 1 second
+    updateTimer();
+    const intervalId = setInterval(updateTimer, 1000);
 
     return () => clearInterval(intervalId);
   }, [deadline, createdAt]);
 
   if (!deadline) return null;
 
-  // SVG parameters for the progress ring
-  const radius = 6;
-  const circumference = 2 * Math.PI * radius;
+  const radius = 10;
+  const circumference = 2 * Math.PI * radius; // ~62.83
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm ${isExpired ? "border-red-200 bg-red-50 text-red-600" : "border-amber-200 bg-amber-50 text-amber-600"}`}>
-      {/* Small Circular Progress Indicator */}
-      <div className="relative flex items-center justify-center w-4 h-4 flex-shrink-0">
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all ${
+      isExpired 
+        ? "border-red-200 bg-red-50 text-red-600 shadow-sm shadow-red-100" 
+        : "border-amber-200 bg-amber-50 text-amber-600 shadow-sm shadow-amber-100"
+    }`}>
+      {/* Circular Progress Ring */}
+      <div className="relative flex items-center justify-center w-6 h-6 flex-shrink-0">
         <svg className="w-full h-full transform -rotate-90">
           <circle 
-            cx="8" cy="8" r={radius} 
+            cx="12" cy="12" r={radius} 
             stroke="currentColor" 
-            strokeWidth="2" 
+            strokeWidth="3" 
             fill="transparent" 
             className="opacity-20" 
           />
           <circle 
-            cx="8" cy="8" r={radius} 
+            cx="12" cy="12" r={radius} 
             stroke="currentColor" 
-            strokeWidth="2" 
+            strokeWidth="3" 
             fill="transparent" 
             strokeDasharray={circumference} 
             strokeDashoffset={strokeDashoffset} 
@@ -145,10 +146,16 @@ function CountdownTimer({ deadline, createdAt }: { deadline: any, createdAt?: an
           />
         </svg>
       </div>
-      {/* Time Text with tabular-nums to prevent layout shift during countdown */}
-      <span className="text-[11px] font-bold tabular-nums">
-        {timeLeft}
-      </span>
+      
+      {/* Time Text Layout */}
+      <div className="flex flex-col justify-center">
+        <span className="text-[10px] font-bold uppercase tracking-wider opacity-80 mb-0.5 leading-none">
+          {isExpired ? "Deadline Passed" : "Time Remaining"}
+        </span>
+        <span className="text-sm font-black tabular-nums leading-none tracking-wide">
+          {timeLeft}
+        </span>
+      </div>
     </div>
   );
 }
@@ -169,7 +176,6 @@ export default function StudentDashboard() {
       }
       setLoading(true);
       try {
-        // Fetch Assignments
         const assignQ = query(
           collection(db, "assignments"),
           where("userId", "==", user.uid),
@@ -179,12 +185,10 @@ export default function StudentDashboard() {
         const assignList = assignSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assignment));
         setAssignments(assignList);
 
-        // Fetch Tasks
         const tasksSnap = await getDocs(query(collection(db, "tasks"), orderBy("createdAt", "desc")));
         const taskList = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
         setTasks(taskList);
 
-        // Fetch submissions
         const submissionData: Record<string, Submission> = {};
         for (const task of taskList) {
           const subDoc = await getDoc(doc(db, "submissions", task.id, "entries", user.uid));
@@ -213,7 +217,7 @@ export default function StudentDashboard() {
   return (
     <div className="space-y-10 pb-20">
       
-      {/* 1. Tasks Section (Moved to the Top) */}
+      {/* 1. Tasks Section */}
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
@@ -222,42 +226,60 @@ export default function StudentDashboard() {
           </div>
           <span className="text-sm text-neutral-500">Tap a task for details and submission status.</span>
         </div>
+        
         <div className="grid grid-cols-1 gap-3">
           {(showAllTasks ? tasks : tasks.slice(0, 5)).map((task) => {
             const submission = submissions[task.id];
             const isDone = !!submission;
+            
             return (
               <Link 
                 key={task.id} 
                 href={`/student/tasks/${task.id}`}
-                className="bg-white p-5 rounded-2xl border border-neutral-100 hover:border-neutral-200 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between group"
+                className="bg-white p-5 rounded-3xl border border-neutral-100 hover:border-neutral-200 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center group gap-4 md:gap-6"
               >
-                <div className="flex flex-1 items-start space-x-4 mb-3 sm:mb-0 mr-4">
-                  <div className={`p-3 rounded-xl flex-shrink-0 mt-1 ${isDone ? "bg-emerald-50 text-emerald-600" : "bg-neutral-50 text-neutral-400"}`}>
+                {/* Left Side: Task Details */}
+                <div className="flex flex-1 items-start space-x-4">
+                  <div className={`p-3.5 rounded-2xl flex-shrink-0 mt-1 transition-colors ${
+                    isDone ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
+                  }`}>
                     {isDone ? <CheckCircle2 size={24} /> : <BookOpen size={24} />}
                   </div>
-                  <div className="flex-1 w-full">
-                    <h3 className="text-base font-bold text-neutral-900 leading-tight">{task.title}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-[17px] font-bold text-neutral-900 leading-tight truncate">
+                      {task.title}
+                    </h3>
 
-                    {/* Short Description */}
                     {task.contentMarkdown && (
-                      <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 mb-2 leading-relaxed">
+                      <p className="text-sm text-neutral-500 line-clamp-2 mt-1.5 leading-relaxed">
                         {task.contentMarkdown.replace(/[#*`>]/g, "")}
                       </p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {isDone && submission.grade ? (
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">Grade: {submission.grade}</span>
-                      ) : isDone ? (
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Submitted</span>
-                      ) : (
-                        task.deadline && <CountdownTimer deadline={task.deadline} createdAt={task.createdAt} />
-                      )}
-                    </div>
+                    {/* Show Badges only on the left side */}
+                    {isDone && (
+                      <div className="flex flex-wrap items-center gap-2 mt-3">
+                        {submission.grade ? (
+                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg">
+                            Grade: {submission.grade}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg">
+                            Submitted
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <ChevronRight size={20} className="text-neutral-300 group-hover:text-neutral-900 transition-all flex-shrink-0" />
+
+                {/* Right Side: Timer & Chevron */}
+                <div className="flex items-center justify-end gap-4 ml-16 md:ml-0 md:flex-shrink-0">
+                  {!isDone && task.deadline && (
+                    <CountdownTimer deadline={task.deadline} createdAt={task.createdAt} />
+                  )}
+                  <ChevronRight size={20} className="text-neutral-300 group-hover:text-neutral-900 transition-colors hidden md:block" />
+                </div>
               </Link>
             );
           })}
@@ -266,7 +288,7 @@ export default function StudentDashboard() {
             <button
               type="button"
               onClick={() => setShowAllTasks((v) => !v)}
-              className="text-xs font-bold text-neutral-400 py-3 hover:text-neutral-900 transition-colors text-center w-full bg-neutral-50 hover:bg-neutral-100 rounded-xl"
+              className="text-sm font-bold text-neutral-500 py-4 hover:text-neutral-900 transition-colors text-center w-full bg-white border border-neutral-100 hover:bg-neutral-50 rounded-2xl"
             >
               {showAllTasks ? "Show fewer tasks" : "View all tasks"}
             </button>
@@ -274,8 +296,8 @@ export default function StudentDashboard() {
         </div>
       </section>
 
-      {/* 2. Running Chapters Section (Moved Down) */}
-      <section className="space-y-4">
+      {/* 2. Running Chapters Section */}
+      <section className="space-y-4 mt-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Zap className="text-amber-500 fill-amber-500 w-5 h-5" />
