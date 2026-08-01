@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/ui/toast-provider";
 import { findChapterMeta, getChapterName, SUBJECTS } from "@/lib/subjects";
 import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import { User, Calendar, Send, Info, X } from "lucide-react";
@@ -25,7 +26,7 @@ export default function AdminRequestsPage() {
   const [selectedPerSubject, setSelectedPerSubject] = useState<Record<string, string | null>>({});
   const [reloadKey, setReloadKey] = useState(0);
   const { user } = useAuth();
-
+  const toast = useToast();
   useEffect(() => {
     let isMounted = true;
     async function fetchRequests() {
@@ -73,7 +74,7 @@ export default function AdminRequestsPage() {
         if (!selectedChapter) continue;
         const dl = deadlines[selectedChapter];
         if (!dl) {
-          alert(`Please set a deadline for the selected chapter in ${subject.name}.`);
+          toast.error(`Please set a deadline for the selected chapter in ${subject.name}.`);
           setIsAssigning(false);
           return;
         }
@@ -86,7 +87,7 @@ export default function AdminRequestsPage() {
       }
 
       if (itemsToAssign.length === 0) {
-        alert("Please select at least one chapter to assign.");
+        toast.error("Please select at least one chapter to assign.");
         setIsAssigning(false);
         return;
       }
@@ -101,14 +102,14 @@ export default function AdminRequestsPage() {
       if (res.ok) {
         setSelectedRequest(null);
         setReloadKey(k => k + 1);
-        alert("Chapters assigned successfully!");
+        toast.success("Chapters assigned successfully!");
       } else {
         console.error('Admin assign error:', data);
-        alert(data?.error || "Failed to assign chapters.");
+        toast.error(data?.error || "Failed to assign chapters.");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to assign chapters.");
+      toast.error("Failed to assign chapters.");
     } finally {
       setIsAssigning(false);
     }

@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { AuthProvider } from '@/components/auth-provider';
+import { ToastProvider } from '@/components/ui/toast-provider';
 
 export const metadata: Metadata = {
   title: 'Omega | Abir Hossen Abdullah',
@@ -19,7 +20,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en">
       <body suppressHydrationWarning className="bg-neutral-50 text-neutral-900 antialiased font-sans">
         <AuthProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

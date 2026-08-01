@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/ui/toast-provider";
 import { Clock, AlertCircle, Trash2, ShieldAlert } from "lucide-react";
 
 interface Student {
@@ -28,7 +29,7 @@ export default function TrackingPage() {
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const { user } = useAuth();
-
+  const toast = useToast();
   const fetchPerformanceData = async () => {
     try {
       if (!user) return;
@@ -54,7 +55,7 @@ export default function TrackingPage() {
   const handleRemoveStudent = async (studentId: string) => {
     if (!confirm("Are you sure you want to remove this student from the programme? This action is permanent.")) return;
     if (!user) {
-      alert("You must be signed in to remove a student.");
+      toast.error("You must be signed in to remove a student.");
       return;
     }
 
@@ -68,13 +69,13 @@ export default function TrackingPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setDefaulters(prev => prev.filter(d => d.student.id !== studentId));
-        alert("Student removed successfully.");
+        toast.success("Student removed successfully.");
       } else {
-        alert(data.error || "Failed to remove student. Auth and profile were not deleted.");
+        toast.error(data.error || "Failed to remove student. Auth and profile were not deleted.");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to remove student.");
+      toast.error("Failed to remove student.");
     } finally {
       setRemovingId(null);
     }

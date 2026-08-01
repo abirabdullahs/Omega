@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@/lib/utils";
 import { Bell, Plus, Trash2, Link as LinkIcon, Clock } from "lucide-react";
 
@@ -25,6 +26,7 @@ export default function AdminNoticesPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const { user } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     let isMounted = true;
@@ -52,7 +54,7 @@ export default function AdminNoticesPage() {
   const handleAddNotice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !content) return;
-    if (!user) return alert("You must be signed in as admin to post notices.");
+    if (!user) return toast.error("You must be signed in as admin to post notices.");
 
     setIsSubmitting(true);
     try {
@@ -69,9 +71,10 @@ export default function AdminNoticesPage() {
         setTargetLink("");
         setShowAdd(false);
         setReloadKey(k => k + 1);
+        toast.success("Notice posted successfully.");
       } else {
         console.error('Create notice error:', data);
-        alert(data?.error || 'Failed to create notice');
+        toast.error(data?.error || 'Failed to create notice');
       }
     } catch (err) {
       console.error(err);
@@ -82,7 +85,7 @@ export default function AdminNoticesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure?")) return;
-    if (!user) return alert("You must be signed in as admin.");
+    if (!user) return toast.error("You must be signed in as admin.");
     try {
       const token = await user.getIdToken();
       const res = await fetch(`${window.location.origin}/api/admin/notices?id=${encodeURIComponent(id)}`, {
@@ -92,9 +95,10 @@ export default function AdminNoticesPage() {
       const data = await res.json().catch(() => null);
       if (res.ok) {
         setReloadKey(k => k + 1);
+        toast.success("Notice deleted.");
       } else {
         console.error('Delete notice error:', data);
-        alert(data?.error || 'Failed to delete notice');
+        toast.error(data?.error || 'Failed to delete notice');
       }
     } catch (err) {
       console.error(err);

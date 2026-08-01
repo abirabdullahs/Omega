@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/ui/toast-provider";
 import { formatDate, parseDateInputLocal } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { Plus, Clock, FileText, Eye, Calendar, Trash2, X } from "lucide-react";
@@ -27,6 +28,7 @@ export default function AdminTasksPage() {
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { user } = useAuth();
+  const toast = useToast();
 
   const fetchTasks = async () => {
     try {
@@ -75,7 +77,7 @@ export default function AdminTasksPage() {
       fetchTasks();
     } catch (err) {
       console.error(err);
-      alert("Failed to delete task.");
+      toast.error("Failed to delete task.");
     } finally {
       setDeletingId(null);
     }

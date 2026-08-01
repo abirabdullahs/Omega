@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, limit, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/auth-provider";
+import { useToast } from "@/components/ui/toast-provider";
 import { SUBJECTS } from "@/lib/subjects";
 import { CheckCircle2, Circle, Send, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { formatDate } from "@/lib/utils";
@@ -16,6 +17,7 @@ export default function CoursePlanPage() {
   const [submitting, setSubmitting] = useState(false);
   const [expandedSubject, setExpandedSubject] = useState<string | null>(SUBJECTS[0].id);
   const { user, userData } = useAuth();
+  const toast = useToast();
 
   const fetchLastRequest = async (uid: string) => {
     const q = query(
@@ -74,15 +76,15 @@ export default function CoursePlanPage() {
       });
       const data = await res.json().catch(() => null);
       if (res.ok) {
-        alert(data.updated ? "Request updated successfully!" : "Request sent successfully!");
+        toast.success(data.updated ? "Request updated successfully!" : "Request sent successfully!");
         await fetchLastRequest(user.uid);
       } else {
         console.error('Requests API error:', data);
-        alert(data?.error || "Failed to send request.");
+        toast.error(data?.error || "Failed to send request.");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to send request.");
+      toast.error("Failed to send request.");
     } finally {
       setSubmitting(false);
     }
