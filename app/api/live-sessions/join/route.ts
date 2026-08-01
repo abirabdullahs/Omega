@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticatedRequest } from "@/lib/api-auth";
+import { createZoomSdkSignature } from "@/lib/zoom";
 import { getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
@@ -67,10 +68,26 @@ export async function POST(req: NextRequest) {
       { merge: true }
     );
 
+    const meetingNumber = session.zoomMeetingId ? String(session.zoomMeetingId).trim() : null;
+    const password = session.zoomMeetingPassword ? String(session.zoomMeetingPassword) : "";
+    const sdkKey = process.env.ZOOM_SDK_KEY || "";
+
+    if (meetingNumber && sdkKey && process.env.ZOOM_SDK_SECRET) {
+      const signature = createZoomSdkSignature(meetingNumber, 0);
+      return NextResponse.json({
+        success: true,
+        meetingNumber,
+        password,
+        sdkKey,
+        signature,
+        topic: session.title || session.topic || "Live session",
+      });
+    }
+
     const meetingUrl = session.zoomJoinUrl
       ? session.zoomJoinUrl
-      : session.zoomMeetingId
-      ? `https://zoom.us/j/${encodeURIComponent(session.zoomMeetingId)}${session.zoomMeetingPassword ? `?pwd=${encodeURIComponent(session.zoomMeetingPassword)}` : ""}`
+      : meetingNumber
+      ? `https://zoom.us/j/${encodeURIComponent(meetingNumber)}${password ? `?pwd=${encodeURIComponent(password)}` : ""}`
       : null;
 
     if (!meetingUrl) {

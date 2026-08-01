@@ -3,6 +3,7 @@ import { getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
+const secret = process.env.ZOOM_WEBHOOK_SECRET ?? "";
 
 function verifyZoomWebhook(req: NextRequest, rawBody: string): boolean {
   const secret = process.env.ZOOM_WEBHOOK_SECRET || process.env.ZOOM_WEBHOOK_TOKEN;

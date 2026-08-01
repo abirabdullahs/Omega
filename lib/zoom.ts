@@ -1,5 +1,9 @@
+import crypto from "crypto";
+
 const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID || "";
 const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET || "";
+const ZOOM_SDK_KEY = process.env.ZOOM_SDK_KEY || "";
+const ZOOM_SDK_SECRET = process.env.ZOOM_SDK_SECRET || "";
 const ZOOM_API_BASE_URL = process.env.ZOOM_API_BASE_URL || "https://api.zoom.us/v2";
 const ZOOM_OAUTH_TOKEN_URL = process.env.ZOOM_OAUTH_TOKEN_URL || "https://zoom.us/oauth/token?grant_type=account_credentials";
 
@@ -66,6 +70,34 @@ async function zoomFetch(path: string, method = "GET", body?: any) {
   }
 
   return data;
+}
+
+function base64UrlEncode(value: string) {
+  return Buffer.from(value).toString("base64url");
+}
+
+export function createZoomSdkSignature(meetingNumber: string | number, role = 0) {
+  if (!ZOOM_SDK_KEY || !ZOOM_SDK_SECRET) {
+    throw new Error("Missing Zoom SDK credentials. Set ZOOM_SDK_KEY and ZOOM_SDK_SECRET.");
+  }
+
+  const iat = Math.floor(Date.now() / 1000) - 30;
+  const exp = iat + 60 * 60;
+  const payload = {
+    sdkKey: ZOOM_SDK_KEY,
+    mn: Number(meetingNumber),
+    role,
+    iat,
+    exp,
+    appKey: ZOOM_SDK_KEY,
+    tokenExp: exp,
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const message = `${encodedHeader}.${encodedPayload}`;
+  const signature = crypto.createHmac("sha256", ZOOM_SDK_SECRET).update(message).digest("base64url");
+  return `${message}.${signature}`;
 }
 
 export interface ZoomMeetingCreateResult {
