@@ -5,7 +5,7 @@ coverage/
 *.log
 .env*
 !.env.example
-omega-90935-firebase-adminsdk-fbsvc-c1f8995154.json
+serviceAccount.json
 .env.local
 .vercel
 .env*.local

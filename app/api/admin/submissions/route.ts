@@ -72,22 +72,67 @@ export async function GET(req: NextRequest) {
 
     try {
       if (!taskId) {
-        // Recent across all tasks using collectionGroup queries. Apply grade
-        // filters at the DB level when requested so Firestore can use indexes.
-        let q: FirebaseFirestore.Query = db.collectionGroup("entries");
-        if (statusFilter === "pending") {
-          q = q.where("grade", "==", null).orderBy("submittedAt", "desc").limit(10);
-        } else if (statusFilter === "graded") {
-          // '!=' requires an orderBy on the same field. Add a secondary
-          // order by submittedAt for recency.
-          q = q.where("grade", "!=", null).orderBy("grade", "asc").orderBy("submittedAt", "desc").limit(10);
-        } else {
-          q = q.orderBy("submittedAt", "desc").limit(10);
-        }
+          // Recent across all tasks: collectionGroup queries require a special
+          // collection-group index which may not be available in all projects
+          // immediately. Instead, fetch the most recently-updated tasks and
+          // read each task's latest entries (bounded) then merge/sort in memory.
+          const recentTasksSnap = await db.collection("tasks").orderBy("updatedAt", "desc").limit(20).get();
+          const taskIds: string[] = recentTasksSnap.docs.map((d: any) => d.id);
 
-        const cgSnap = await q.get();
-        allSubmissions = await mapEntriesSnap(cgSnap);
-        return NextResponse.json({ items: allSubmissions, scope: "recent" });
+          const fetchedEntries: any[] = [];
+          for (const tId of taskIds) {
+            const entriesSnap = await db.collection("submissions").doc(tId).collection("entries").orderBy("submittedAt", "desc").limit(5).get();
+            for (const entry of entriesSnap.docs) {
+              const data = entry.data() || {};
+              fetchedEntries.push({ doc: entry, data, taskId: tId });
+            }
+          }
+
+          // Map to response shape and sort by submittedAt desc
+          const taskTitleCache: Record<string, string> = {};
+          const out: any[] = [];
+          for (const item of fetchedEntries) {
+            const entry = item.doc;
+            const data = item.data;
+            const taskIdForEntry = item.taskId || "";
+            if (taskIdForEntry && !(taskIdForEntry in taskTitleCache)) {
+              try {
+                const taskSnap = await db.collection("tasks").doc(taskIdForEntry).get();
+                taskTitleCache[taskIdForEntry] = (taskSnap.data() || {}).title || "";
+              } catch (e) {
+                taskTitleCache[taskIdForEntry] = "";
+              }
+            }
+
+            out.push({
+              id: entry.id,
+              taskId: taskIdForEntry,
+              taskTitle: taskTitleCache[taskIdForEntry] || "",
+              studentId: data.studentId,
+              studentPhone: data.studentPhone || "",
+              studentName: studentMap[data.studentId] || null,
+              text: data.text || "",
+              submittedAt: data.submittedAt || null,
+              grade: data.grade || null,
+              feedback: data.feedback || null,
+            });
+          }
+
+          out.sort((a, b) => {
+            const ta = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+            const tb = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+            return tb - ta;
+          });
+
+          if (statusFilter === "pending") {
+            allSubmissions = out.filter((s) => !s.grade).slice(0, 10);
+          } else if (statusFilter === "graded") {
+            allSubmissions = out.filter((s) => !!s.grade).slice(0, 10);
+          } else {
+            allSubmissions = out.slice(0, 10);
+          }
+
+          return NextResponse.json({ items: allSubmissions, scope: "recent" });
       }
 
       const taskDoc = await db.collection("tasks").doc(taskId).get();
