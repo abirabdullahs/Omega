@@ -135,10 +135,15 @@
         }
       ]
     }
+    ,
     {
       "collectionGroup": "entries",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
+        {
+          "fieldPath": "grade",
+          "order": "ASCENDING"
+        },
         {
           "fieldPath": "submittedAt",
           "order": "DESCENDING"

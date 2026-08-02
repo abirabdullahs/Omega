@@ -32,24 +32,29 @@ export async function GET(req: NextRequest) {
       studentMap[d.id] = data.name || data.phone || "";
     });
 
+    // Build a query that filters at Firestore level where possible to avoid
+    // downloading large result sets and doing client-side filtering.
     let allSubmissions: any[] = [];
 
-    if (!taskId) {
-      // No task selected — show the most recent submissions across every
-      // task via a single indexed collection-group query, instead of
-      // scanning each task's entries subcollection one by one.
-      const cgSnap = await db.collectionGroup("entries").orderBy("submittedAt", "desc").limit(10).get();
-
+    // Helper to map a query snapshot to the common response shape.
+    async function mapEntriesSnap(snapshot: FirebaseFirestore.QuerySnapshot) {
       const taskTitleCache: Record<string, string> = {};
-      for (const entry of cgSnap.docs) {
+      const out: any[] = [];
+      for (const entry of snapshot.docs) {
         const data = entry.data() || {};
-        const taskRef = entry.ref.parent.parent; // submissions/{taskId}
+        // When using collectionGroup the parent is submissions/{taskId}
+        const taskRef = (entry.ref as any).parent.parent;
         const taskIdForEntry = taskRef?.id || "";
         if (taskIdForEntry && !(taskIdForEntry in taskTitleCache)) {
-          const taskSnap = await taskRef!.get();
-          taskTitleCache[taskIdForEntry] = (taskSnap.data() || {}).title || "";
+          try {
+            const taskSnap = await taskRef!.get();
+            taskTitleCache[taskIdForEntry] = (taskSnap.data() || {}).title || "";
+          } catch (e) {
+            taskTitleCache[taskIdForEntry] = "";
+          }
         }
-        allSubmissions.push({
+
+        out.push({
           id: entry.id,
           taskId: taskIdForEntry,
           taskTitle: taskTitleCache[taskIdForEntry] || "",
@@ -62,6 +67,125 @@ export async function GET(req: NextRequest) {
           feedback: data.feedback || null,
         });
       }
+      return out;
+    }
+
+    try {
+      if (!taskId) {
+        // Recent across all tasks using collectionGroup queries. Apply grade
+        // filters at the DB level when requested so Firestore can use indexes.
+        let q: FirebaseFirestore.Query = db.collectionGroup("entries");
+        if (statusFilter === "pending") {
+          q = q.where("grade", "==", null).orderBy("submittedAt", "desc").limit(10);
+        } else if (statusFilter === "graded") {
+          // '!=' requires an orderBy on the same field. Add a secondary
+          // order by submittedAt for recency.
+          q = q.where("grade", "!=", null).orderBy("grade", "asc").orderBy("submittedAt", "desc").limit(10);
+        } else {
+          q = q.orderBy("submittedAt", "desc").limit(10);
+        }
+
+        const cgSnap = await q.get();
+        allSubmissions = await mapEntriesSnap(cgSnap);
+        return NextResponse.json({ items: allSubmissions, scope: "recent" });
+      }
+
+      const taskDoc = await db.collection("tasks").doc(taskId).get();
+      if (!taskDoc.exists) {
+        return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      }
+      const taskTitle = (taskDoc.data() || {}).title || "";
+
+      // Query the specific task's entries subcollection and push filtering
+      // into Firestore instead of pulling everything and filtering in JS.
+      let entriesRef: FirebaseFirestore.Query = db.collection("submissions").doc(taskId).collection("entries");
+      if (statusFilter === "pending") {
+        entriesRef = entriesRef.where("grade", "==", null).orderBy("submittedAt", "desc");
+      } else if (statusFilter === "graded") {
+        entriesRef = entriesRef.where("grade", "!=", null).orderBy("grade", "asc").orderBy("submittedAt", "desc");
+      } else {
+        entriesRef = entriesRef.orderBy("submittedAt", "desc");
+      }
+
+      const entriesSnap = await entriesRef.get();
+      entriesSnap.docs.forEach((entry: any) => {
+        const data = entry.data() || {};
+        allSubmissions.push({
+          id: entry.id,
+          taskId,
+          taskTitle,
+          studentId: data.studentId,
+          studentPhone: data.studentPhone || "",
+          studentName: studentMap[data.studentId] || null,
+          text: data.text || "",
+          submittedAt: data.submittedAt || null,
+          grade: data.grade || null,
+          feedback: data.feedback || null,
+        });
+      });
+
+      return NextResponse.json({ items: allSubmissions, scope: "task" });
+    } catch (err: any) {
+      // If a Firestore query fails (missing index or other), fall back to the
+      // previous behavior and do server-side filtering in memory so the
+      // endpoint remains functional while surfacing the error to logs.
+      console.error("Firestore filtered query failed, falling back:", err);
+
+      // Fallback: previous behavior — recent (collectionGroup) or full task
+      // entries fetch then JS filtering.
+      if (!taskId) {
+        const cgSnap = await db.collectionGroup("entries").orderBy("submittedAt", "desc").limit(10).get();
+        const taskTitleCache: Record<string, string> = {};
+        for (const entry of cgSnap.docs) {
+          const data = entry.data() || {};
+          const taskRef = entry.ref.parent.parent;
+          const taskIdForEntry = taskRef?.id || "";
+          if (taskIdForEntry && !(taskIdForEntry in taskTitleCache)) {
+            const taskSnap = await taskRef!.get();
+            taskTitleCache[taskIdForEntry] = (taskSnap.data() || {}).title || "";
+          }
+          allSubmissions.push({
+            id: entry.id,
+            taskId: taskIdForEntry,
+            taskTitle: taskTitleCache[taskIdForEntry] || "",
+            studentId: data.studentId,
+            studentPhone: data.studentPhone || "",
+            studentName: studentMap[data.studentId] || null,
+            text: data.text || "",
+            submittedAt: data.submittedAt || null,
+            grade: data.grade || null,
+            feedback: data.feedback || null,
+          });
+        }
+
+        if (statusFilter === "pending") {
+          allSubmissions = allSubmissions.filter((s) => !s.grade);
+        } else if (statusFilter === "graded") {
+          allSubmissions = allSubmissions.filter((s) => !!s.grade);
+        }
+
+        return NextResponse.json({ items: allSubmissions, scope: "recent", fallback: true });
+      }
+
+      const taskDoc2 = await db.collection("tasks").doc(taskId).get();
+      if (!taskDoc2.exists) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      const taskTitle2 = (taskDoc2.data() || {}).title || "";
+      const entriesSnap2 = await db.collection("submissions").doc(taskId).collection("entries").get();
+      entriesSnap2.docs.forEach((entry: any) => {
+        const data = entry.data() || {};
+        allSubmissions.push({
+          id: entry.id,
+          taskId,
+          taskTitle: taskTitle2,
+          studentId: data.studentId,
+          studentPhone: data.studentPhone || "",
+          studentName: studentMap[data.studentId] || null,
+          text: data.text || "",
+          submittedAt: data.submittedAt || null,
+          grade: data.grade || null,
+          feedback: data.feedback || null,
+        });
+      });
 
       if (statusFilter === "pending") {
         allSubmissions = allSubmissions.filter((s) => !s.grade);
@@ -69,46 +193,14 @@ export async function GET(req: NextRequest) {
         allSubmissions = allSubmissions.filter((s) => !!s.grade);
       }
 
-      return NextResponse.json({ items: allSubmissions, scope: "recent" });
-    }
-
-    const taskDoc = await db.collection("tasks").doc(taskId).get();
-    if (!taskDoc.exists) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
-    }
-    const taskTitle = (taskDoc.data() || {}).title || "";
-
-    const entriesSnap = await db.collection("submissions").doc(taskId).collection("entries").get();
-    entriesSnap.docs.forEach((entry: any) => {
-      const data = entry.data() || {};
-      allSubmissions.push({
-        id: entry.id,
-        taskId,
-        taskTitle,
-        studentId: data.studentId,
-        studentPhone: data.studentPhone || "",
-        studentName: studentMap[data.studentId] || null,
-        text: data.text || "",
-        submittedAt: data.submittedAt || null,
-        grade: data.grade || null,
-        feedback: data.feedback || null,
+      allSubmissions.sort((a, b) => {
+        const ta = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const tb = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return tb - ta;
       });
-    });
 
-    if (statusFilter === "pending") {
-      allSubmissions = allSubmissions.filter((s) => !s.grade);
-    } else if (statusFilter === "graded") {
-      allSubmissions = allSubmissions.filter((s) => !!s.grade);
+      return NextResponse.json({ items: allSubmissions, scope: "task", fallback: true });
     }
-
-    // sort by submittedAt desc (handle timestamp or number)
-    allSubmissions.sort((a, b) => {
-      const ta = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-      const tb = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-      return tb - ta;
-    });
-
-    return NextResponse.json({ items: allSubmissions, scope: "task" });
   } catch (error: any) {
     console.error("Error listing submissions:", error);
     const initError = getAdminInitError();
