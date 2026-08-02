@@ -22,13 +22,54 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const taskId = searchParams.get("taskId") || "";
+    const statusFilter = searchParams.get("status") || ""; // "pending" | "graded" | ""
+
+    // Fetch students once (small collection) — used to resolve names either way.
+    const studentsSnap = await db.collection("users").where("role", "==", "student").get();
+    const studentMap: Record<string, string> = {};
+    studentsSnap.docs.forEach((d: any) => {
+      const data = d.data() || {};
+      studentMap[d.id] = data.name || data.phone || "";
+    });
+
+    let allSubmissions: any[] = [];
 
     if (!taskId) {
-      // No task selected — return nothing yet. The client fetches the task
-      // list itself (cheap, direct Firestore read); this route only ever
-      // reads submissions for one task at a time so it doesn't scan every
-      // task's entries subcollection on every page load.
-      return NextResponse.json({ items: [] });
+      // No task selected — show the most recent submissions across every
+      // task via a single indexed collection-group query, instead of
+      // scanning each task's entries subcollection one by one.
+      const cgSnap = await db.collectionGroup("entries").orderBy("submittedAt", "desc").limit(10).get();
+
+      const taskTitleCache: Record<string, string> = {};
+      for (const entry of cgSnap.docs) {
+        const data = entry.data() || {};
+        const taskRef = entry.ref.parent.parent; // submissions/{taskId}
+        const taskIdForEntry = taskRef?.id || "";
+        if (taskIdForEntry && !(taskIdForEntry in taskTitleCache)) {
+          const taskSnap = await taskRef!.get();
+          taskTitleCache[taskIdForEntry] = (taskSnap.data() || {}).title || "";
+        }
+        allSubmissions.push({
+          id: entry.id,
+          taskId: taskIdForEntry,
+          taskTitle: taskTitleCache[taskIdForEntry] || "",
+          studentId: data.studentId,
+          studentPhone: data.studentPhone || "",
+          studentName: studentMap[data.studentId] || null,
+          text: data.text || "",
+          submittedAt: data.submittedAt || null,
+          grade: data.grade || null,
+          feedback: data.feedback || null,
+        });
+      }
+
+      if (statusFilter === "pending") {
+        allSubmissions = allSubmissions.filter((s) => !s.grade);
+      } else if (statusFilter === "graded") {
+        allSubmissions = allSubmissions.filter((s) => !!s.grade);
+      }
+
+      return NextResponse.json({ items: allSubmissions, scope: "recent" });
     }
 
     const taskDoc = await db.collection("tasks").doc(taskId).get();
@@ -37,15 +78,6 @@ export async function GET(req: NextRequest) {
     }
     const taskTitle = (taskDoc.data() || {}).title || "";
 
-    // Fetch students (only those with role=student)
-    const studentsSnap = await db.collection("users").where("role", "==", "student").get();
-    const studentMap: Record<string, string> = {};
-    studentsSnap.docs.forEach((d: any) => {
-      const data = d.data() || {};
-      studentMap[d.id] = data.name || data.phone || "";
-    });
-
-    const allSubmissions: any[] = [];
     const entriesSnap = await db.collection("submissions").doc(taskId).collection("entries").get();
     entriesSnap.docs.forEach((entry: any) => {
       const data = entry.data() || {};
@@ -63,6 +95,12 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    if (statusFilter === "pending") {
+      allSubmissions = allSubmissions.filter((s) => !s.grade);
+    } else if (statusFilter === "graded") {
+      allSubmissions = allSubmissions.filter((s) => !!s.grade);
+    }
+
     // sort by submittedAt desc (handle timestamp or number)
     allSubmissions.sort((a, b) => {
       const ta = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
@@ -70,7 +108,7 @@ export async function GET(req: NextRequest) {
       return tb - ta;
     });
 
-    return NextResponse.json({ items: allSubmissions });
+    return NextResponse.json({ items: allSubmissions, scope: "task" });
   } catch (error: any) {
     console.error("Error listing submissions:", error);
     const initError = getAdminInitError();

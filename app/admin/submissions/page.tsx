@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
 import { formatDateTime } from "@/lib/utils";
 import { Loader } from "@/components/ui/loader";
-import { Clock, User, FileText, Search, Trash2, X, ListFilter } from "lucide-react";
+import { Clock, User, Search, Trash2, X, ListFilter, CheckCircle2 } from "lucide-react";
 
 interface TaskOption {
   id: string;
@@ -35,6 +35,7 @@ export default function AdminSubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "pending" | "graded">("");
 
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [grade, setGrade] = useState("");
@@ -64,13 +65,16 @@ export default function AdminSubmissionsPage() {
     fetchTasks();
   }, []);
 
-  const fetchSubmissions = async (taskId: string) => {
-    if (!user || !taskId) return;
+  const fetchSubmissions = async (taskId: string, status: string) => {
+    if (!user) return;
     setLoading(true);
     try {
       const token = await user.getIdToken();
+      const params = new URLSearchParams();
+      if (taskId) params.set("taskId", taskId);
+      if (status) params.set("status", status);
       const res = await fetch(
-        `${window.location.origin}/api/admin/submissions?taskId=${encodeURIComponent(taskId)}`,
+        `${window.location.origin}/api/admin/submissions?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const data = await res.json().catch(() => null);
@@ -88,10 +92,12 @@ export default function AdminSubmissionsPage() {
     }
   };
 
+  // Default view: last 10 submissions across all tasks. Selecting a task
+  // narrows to that task; the status filter applies either way.
   useEffect(() => {
-    if (selectedTaskId) fetchSubmissions(selectedTaskId);
-    else setSubmissions([]);
-  }, [selectedTaskId, user?.uid]);
+    if (!user) return;
+    fetchSubmissions(selectedTaskId, statusFilter);
+  }, [selectedTaskId, statusFilter, user?.uid]);
 
   useEffect(() => {
     if (!selectedSub) return;
@@ -135,7 +141,7 @@ export default function AdminSubmissionsPage() {
         setSelectedSub(null);
         setGrade("");
         setFeedback("");
-        if (selectedTaskId) fetchSubmissions(selectedTaskId);
+        fetchSubmissions(selectedTaskId, statusFilter);
         toast.success("Grade saved.");
       } else {
         console.error('Grading API error:', data);
@@ -179,10 +185,12 @@ export default function AdminSubmissionsPage() {
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold text-neutral-900">Student Submissions</h2>
-        <p className="text-neutral-500 text-sm">Pick a task to review and grade its submissions.</p>
+        <p className="text-neutral-500 text-sm">
+          {selectedTaskId ? "Reviewing submissions for the selected task." : "Showing the 10 most recent submissions across all tasks."}
+        </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div className="grid gap-3 sm:grid-cols-3 sm:items-center">
         <div className="relative">
           <ListFilter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <select
@@ -191,38 +199,44 @@ export default function AdminSubmissionsPage() {
             disabled={tasksLoading}
             className="w-full appearance-none rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm font-medium text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100 disabled:opacity-50"
           >
-            <option value="">{tasksLoading ? "Loading tasks…" : "Select a task…"}</option>
+            <option value="">{tasksLoading ? "Loading tasks…" : "All tasks (last 10)"}</option>
             {tasks.map((t) => (
               <option key={t.id} value={t.id}>{t.title}</option>
             ))}
           </select>
         </div>
 
-        {selectedTaskId && (
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search student or answer…"
-              className="w-full sm:w-64 rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100"
-            />
-          </div>
-        )}
+        <div className="relative">
+          <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "" | "pending" | "graded")}
+            className="w-full appearance-none rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm font-medium text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100"
+          >
+            <option value="">All statuses</option>
+            <option value="pending">Pending only</option>
+            <option value="graded">Graded only</option>
+          </select>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search student or answer…"
+            className="w-full rounded-2xl border border-neutral-200 bg-white pl-11 pr-4 py-3 text-sm focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-100"
+          />
+        </div>
       </div>
 
-      {!selectedTaskId ? (
-        <div className="py-20 text-center text-neutral-400 bg-white rounded-2xl border border-dashed border-neutral-200">
-          <FileText size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Select a task above to load its submissions.</p>
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="py-20">
           <Loader label="Loading submissions…" className="text-neutral-900" />
         </div>
       ) : filteredSubmissions.length === 0 ? (
         <div className="py-20 text-center text-neutral-400 bg-white rounded-2xl border border-neutral-100">
-          {submissions.length === 0 ? "No submissions for this task yet." : "No submissions match your search."}
+          {submissions.length === 0 ? "No submissions found." : "No submissions match your search."}
         </div>
       ) : (
         <div className="space-y-4">
