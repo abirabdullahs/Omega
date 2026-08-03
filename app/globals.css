@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-hind-siliguri), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

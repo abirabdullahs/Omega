@@ -1,7 +1,18 @@
 import type {Metadata, Viewport} from 'next';
+import { Hind_Siliguri } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/components/auth-provider';
 import { ToastProvider } from '@/components/ui/toast-provider';
+
+// Hind Siliguri covers both Bengali and Latin glyphs, so it's used as the
+// single app-wide font (via --font-hind-siliguri, mapped to Tailwind's
+// font-sans in globals.css) rather than switching fonts per script.
+const hindSiliguri = Hind_Siliguri({
+  subsets: ['bengali', 'latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-hind-siliguri',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Omega | Abir Hossen Abdullah',
@@ -27,7 +38,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en">
+    <html lang="en" className={hindSiliguri.variable}>
       <body suppressHydrationWarning className="bg-neutral-50 text-neutral-900 antialiased font-sans">
         <AuthProvider>
           <ToastProvider>
