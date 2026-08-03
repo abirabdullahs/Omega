@@ -3,12 +3,51 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/ui/toast-provider";
-import { Sparkles, Settings2, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Sparkles, Settings2, X, ArrowUp, ArrowDown, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { SUBJECTS } from "@/lib/subjects";
 
 function subjectName(subjectId: string): string {
   return SUBJECTS.find((s) => s.id === subjectId)?.name || subjectId;
+}
+
+function padTime(n: number) {
+  return String(Math.max(0, n)).padStart(2, "0");
+}
+
+function TopicCountdown({ deadlineAt }: { deadlineAt: number | null }) {
+  const [timeText, setTimeText] = useState("00 : 00 : 00");
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    if (!deadlineAt) return;
+    const update = () => {
+      const diff = deadlineAt - Date.now();
+      if (diff <= 0) {
+        setTimeText("00 : 00 : 00");
+        setIsExpired(true);
+        return;
+      }
+      setIsExpired(false);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setTimeText(`${padTime(hours)} : ${padTime(minutes)} : ${padTime(seconds)}`);
+      setIsUrgent(diff <= 60 * 60 * 1000); // under 1 hour left
+    };
+    update();
+    const id = window.setInterval(update, 1000);
+    return () => window.clearInterval(id);
+  }, [deadlineAt]);
+
+  if (!deadlineAt) return null;
+
+  return (
+    <p className={`font-mono text-lg font-bold tracking-wider ${isExpired ? "text-red-300" : isUrgent ? "text-amber-300" : "text-white"}`}>
+      {isExpired ? "Deadline passed" : timeText}
+    </p>
+  );
 }
 
 interface CurrentTopic {
@@ -27,7 +66,9 @@ export default function CurrentTopicCard() {
 
   const [currentTopic, setCurrentTopic] = useState<CurrentTopic | null>(null);
   const [subjectOrder, setSubjectOrder] = useState<string[]>([]);
+  const [deadlineAt, setDeadlineAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -41,6 +82,7 @@ export default function CurrentTopicCard() {
       if (res.ok) {
         setCurrentTopic(data.currentTopic || null);
         setSubjectOrder(data.subjectOrder || []);
+        setDeadlineAt(data.deadlineAt || null);
       }
     } catch (err) {
       console.error(err);
@@ -52,6 +94,35 @@ export default function CurrentTopicCard() {
   useEffect(() => {
     load();
   }, [user?.uid]);
+
+  const handleSubmitTopic = async () => {
+    if (!user || !currentTopic) return;
+    setSubmitting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/topics/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setCurrentTopic(data.currentTopic || null);
+        setDeadlineAt(data.deadlineAt || null);
+        toast.success(
+          data.lapCompleted
+            ? "Topic complete! You've finished a full round — starting fresh."
+            : "Topic complete! Extra time carried forward to the next one."
+        );
+      } else {
+        toast.error(data?.error || "Failed to submit topic.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to submit topic.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const openReorder = () => {
     setDraftOrder(subjectOrder);
@@ -121,9 +192,25 @@ export default function CurrentTopicCard() {
             {currentTopic.subjectName} · {currentTopic.chapterName}
           </p>
           <h3 className="text-2xl font-bold mb-1">{currentTopic.topic.name}</h3>
-          <p className="text-sm text-violet-200">
+          <p className="text-sm text-violet-200 mb-4">
             Topic {currentTopic.topicIndex + 1} of {currentTopic.topicsInChapter}
           </p>
+
+          <div className="flex flex-wrap items-center justify-between gap-4 relative z-10">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-violet-200 mb-1">Time remaining</p>
+              <TopicCountdown deadlineAt={deadlineAt} />
+            </div>
+            <button
+              onClick={handleSubmitTopic}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-violet-700 shadow-lg hover:bg-violet-50 disabled:opacity-50 transition-all"
+            >
+              <CheckCircle2 size={16} />
+              {submitting ? "Submitting…" : "Submitted"}
+            </button>
+          </div>
+
           <div className="absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
         </div>
       ) : (

@@ -20,8 +20,11 @@ export interface CycleDoc {
   subjectOrder: string[];
   cursor: number;
   topicIndexBySubject: Record<string, number>;
+  currentDeadlineAt?: number | null;
   updatedAt?: any;
 }
+
+export const TOPIC_DEADLINE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Loads (or lazily creates) a student's rotation state, and keeps
@@ -63,6 +66,23 @@ export async function getOrInitCycle(studentId: string, assignedSubjectIds: stri
   }
 
   return cycle;
+}
+
+/**
+ * Lazily starts a fresh 24h deadline the first time a topic becomes
+ * "current" and no deadline has been set yet (e.g. right after the very
+ * first topic is added). Submitting is what moves the deadline forward
+ * after that — see /api/topics/submit.
+ */
+export async function ensureDeadline(studentId: string, cycle: CycleDoc, hasCurrentTopic: boolean): Promise<CycleDoc> {
+  if (cycle.currentDeadlineAt || !hasCurrentTopic) return cycle;
+
+  const db = getAdminDb();
+  if (!db) return cycle;
+
+  const currentDeadlineAt = Date.now() + TOPIC_DEADLINE_MS;
+  await db.collection("studyCycles").doc(studentId).set({ currentDeadlineAt }, { merge: true });
+  return { ...cycle, currentDeadlineAt };
 }
 
 /**
@@ -113,4 +133,37 @@ export function resolveCurrentTopic(
   }
 
   return null;
+}
+
+/**
+ * Loads everything needed to know a student's current rotation state:
+ * their assigned chapters, all their topics grouped by subject, the
+ * cycle doc (auto-synced), the resolved current topic, and its deadline
+ * (lazily started if this is the very first topic).
+ */
+export async function loadStudentCycleState(studentId: string) {
+  const db = getAdminDb();
+  if (!db) throw new Error("Firebase Admin not configured");
+
+  const [assignmentsSnap, topicsSnap] = await Promise.all([
+    db.collection("assignments").where("userId", "==", studentId).where("status", "==", "running").limit(1).get(),
+    db.collection("topics").where("studentId", "==", studentId).get(),
+  ]);
+
+  const assignedItems: AssignmentItemLite[] = assignmentsSnap.empty ? [] : (assignmentsSnap.docs[0].data().items || []);
+  const assignedSubjectIds = assignedItems.map((it) => it.subjectId).filter(Boolean);
+
+  const topicsBySubject: Record<string, TopicLite[]> = {};
+  topicsSnap.docs.forEach((d: any) => {
+    const data = d.data();
+    const topic: TopicLite = { id: d.id, chapterId: data.chapterId, name: data.name, status: data.status || "pending", order: data.order ?? 0 };
+    if (!topicsBySubject[data.subjectId]) topicsBySubject[data.subjectId] = [];
+    topicsBySubject[data.subjectId].push(topic);
+  });
+
+  const cycle = await getOrInitCycle(studentId, assignedSubjectIds);
+  const currentTopic = resolveCurrentTopic(cycle, assignedItems, topicsBySubject);
+  const cycleWithDeadline = await ensureDeadline(studentId, cycle, !!currentTopic);
+
+  return { cycle: cycleWithDeadline, assignedItems, topicsBySubject, currentTopic };
 }

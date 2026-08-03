@@ -1,35 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthenticatedRequest } from "@/lib/api-auth";
 import { getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
-import { getOrInitCycle, resolveCurrentTopic, type TopicLite } from "@/lib/studyCycle";
+import { loadStudentCycleState } from "@/lib/studyCycle";
 
 export const runtime = "nodejs";
-
-async function loadStudentState(studentId: string) {
-  const db = getAdminDb();
-  if (!db) throw new Error("Firebase Admin not configured");
-
-  const [assignmentsSnap, topicsSnap] = await Promise.all([
-    db.collection("assignments").where("userId", "==", studentId).where("status", "==", "running").limit(1).get(),
-    db.collection("topics").where("studentId", "==", studentId).get(),
-  ]);
-
-  const assignedItems = assignmentsSnap.empty ? [] : (assignmentsSnap.docs[0].data().items || []);
-  const assignedSubjectIds = assignedItems.map((it: any) => it.subjectId).filter(Boolean);
-
-  const topicsBySubject: Record<string, TopicLite[]> = {};
-  topicsSnap.docs.forEach((d: any) => {
-    const data = d.data();
-    const topic: TopicLite = { id: d.id, chapterId: data.chapterId, name: data.name, status: data.status || "pending", order: data.order ?? 0 };
-    if (!topicsBySubject[data.subjectId]) topicsBySubject[data.subjectId] = [];
-    topicsBySubject[data.subjectId].push(topic);
-  });
-
-  const cycle = await getOrInitCycle(studentId, assignedSubjectIds);
-  const currentTopic = resolveCurrentTopic(cycle, assignedItems, topicsBySubject);
-
-  return { cycle, assignedItems, topicsBySubject, currentTopic };
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,11 +15,12 @@ export async function GET(req: NextRequest) {
     const studentId = role === "admin" ? searchParams.get("studentId") || "" : uid;
     if (!studentId) return NextResponse.json({ error: "Missing studentId" }, { status: 400 });
 
-    const { cycle, currentTopic } = await loadStudentState(studentId);
+    const { cycle, currentTopic } = await loadStudentCycleState(studentId);
 
     return NextResponse.json({
       subjectOrder: cycle.subjectOrder,
       currentTopic,
+      deadlineAt: cycle.currentDeadlineAt || null,
     });
   } catch (err: any) {
     console.error("Error resolving study cycle:", err);
