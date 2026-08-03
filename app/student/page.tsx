@@ -183,6 +183,7 @@ export default function StudentDashboard() {
     {}
   );
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [topicProgress, setTopicProgress] = useState<Record<string, { submitted: number; total: number }>>({});
   const [loading, setLoading] = useState(true);
   const [showAllTasks, setShowAllTasks] = useState(false);
 
@@ -257,6 +258,25 @@ export default function StudentDashboard() {
         setAssignments(assignList);
         setTasks(taskList);
         setSubmissions(submissionData);
+
+        // Per-chapter topic progress (submitted / total), for the progress
+        // bars on each running chapter card.
+        try {
+          const token = await user.getIdToken();
+          const topicsRes = await fetch("/api/topics", { headers: { Authorization: `Bearer ${token}` } });
+          const topicsData = await topicsRes.json().catch(() => null);
+          if (topicsRes.ok && Array.isArray(topicsData?.items)) {
+            const progress: Record<string, { submitted: number; total: number }> = {};
+            topicsData.items.forEach((t: any) => {
+              if (!progress[t.chapterId]) progress[t.chapterId] = { submitted: 0, total: 0 };
+              progress[t.chapterId].total += 1;
+              if (t.status === "submitted") progress[t.chapterId].submitted += 1;
+            });
+            setTopicProgress(progress);
+          }
+        } catch (topicErr) {
+          console.error("Failed to fetch topic progress:", topicErr);
+        }
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
       } finally {
@@ -436,7 +456,10 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {runningItems.map((item) => (
+                {runningItems.map((item) => {
+                  const progress = topicProgress[item.chapterId];
+                  const pct = progress && progress.total > 0 ? Math.round((progress.submitted / progress.total) * 100) : 0;
+                  return (
                   <div
                     key={item.chapterId}
                     className="rounded-2xl border border-white/5 bg-white/5 p-4"
@@ -457,8 +480,21 @@ export default function StudentDashboard() {
                         month: "short",
                       }) || "—"}
                     </p>
+
+                    {progress && progress.total > 0 && (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-neutral-400 mb-1">
+                          <span>{progress.submitted}/{progress.total} topics</span>
+                          <span>{pct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                          <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

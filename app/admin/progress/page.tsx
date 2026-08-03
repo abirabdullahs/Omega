@@ -13,6 +13,7 @@ interface AssignmentItem {
   subjectName?: string | null;
   deadline?: number;
   deadlineMillis?: number;
+  progress?: { submitted: number; total: number } | null;
 }
 
 interface ProgressRow {
@@ -142,6 +143,8 @@ export default function AdminProgressPage() {
                   {items.map((it, idx) => {
                     const chapterName = getChapterName(it.chapterId) || it.chapterId;
                     const itemDeadline = it.deadline || it.deadlineMillis;
+                    const progress = it.progress;
+                    const pct = progress && progress.total > 0 ? Math.round((progress.submitted / progress.total) * 100) : null;
                     return (
                       <div key={idx} className="rounded-2xl bg-neutral-50 px-4 py-3">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{it.subjectName || it.subjectId}</p>
@@ -149,6 +152,19 @@ export default function AdminProgressPage() {
                         {itemDeadline ? (
                           <p className="text-[11px] text-neutral-500 mt-1">Due {formatDate(itemDeadline)}</p>
                         ) : null}
+                        {pct !== null ? (
+                          <div className="mt-2">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-neutral-400 mb-1">
+                              <span>{progress!.submitted}/{progress!.total} topics</span>
+                              <span>{pct}%</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-neutral-200 overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-neutral-400 mt-2 italic">No topics added yet</p>
+                        )}
                       </div>
                     );
                   })}

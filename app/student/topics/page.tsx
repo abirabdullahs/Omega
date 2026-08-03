@@ -181,13 +181,22 @@ export default function StudentTopicsPage() {
         <div className="space-y-3">
           {assignedItems.map((item) => {
             const topics = topicsByChapter[item.chapterId] || [];
+            const submittedCount = topics.filter((t) => t.status === "submitted").length;
+            const pct = topics.length > 0 ? Math.round((submittedCount / topics.length) * 100) : 0;
             return (
               <div key={item.chapterId} className="bg-white p-5 rounded-2xl border border-neutral-100">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{item.subjectName || item.subjectId}</p>
                     <p className="text-sm font-bold text-neutral-900 truncate">{getChapterName(item.chapterId)}</p>
-                    <p className="text-xs text-neutral-400 mt-1">{topics.length} topic{topics.length === 1 ? "" : "s"}</p>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      {topics.length === 0 ? "No topics yet" : `${submittedCount} of ${topics.length} topics submitted`}
+                    </p>
+                    {topics.length > 0 && (
+                      <div className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-neutral-100 overflow-hidden">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => openEdit(item)}
@@ -231,6 +240,13 @@ export default function StudentTopicsPage() {
                 <p className="text-xs font-bold text-neutral-400 uppercase tracking-wide">Existing topics</p>
                 {(topicsByChapter[editingChapter.chapterId] || []).map((topic) => (
                   <div key={topic.id} className="flex items-center gap-2">
+                    <span
+                      className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-1 rounded-md w-[70px] text-center ${
+                        topic.status === "submitted" ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50"
+                      }`}
+                    >
+                      {topic.status}
+                    </span>
                     <input
                       value={renameDrafts[topic.id] ?? topic.name}
                       onChange={(e) => setRenameDrafts((prev) => ({ ...prev, [topic.id]: e.target.value }))}

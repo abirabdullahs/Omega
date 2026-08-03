@@ -12,10 +12,24 @@ export async function GET(req: NextRequest) {
     const db = getAdminDb();
     if (!db) return NextResponse.json({ error: "Firebase Admin not configured", details: getAdminInitError() }, { status: 500 });
 
-    const [assignmentsSnap, studentsSnap] = await Promise.all([
+    const [assignmentsSnap, studentsSnap, topicsSnap] = await Promise.all([
       db.collection("assignments").get(),
       db.collection("users").where("role", "==", "student").get(),
+      db.collection("topics").get(),
     ]);
+
+    // studentId -> chapterId -> { submitted, total }
+    const progressByStudentChapter: Record<string, Record<string, { submitted: number; total: number }>> = {};
+    topicsSnap.docs.forEach((d: any) => {
+      const data = d.data();
+      const sid = data.studentId;
+      const cid = data.chapterId;
+      if (!sid || !cid) return;
+      if (!progressByStudentChapter[sid]) progressByStudentChapter[sid] = {};
+      if (!progressByStudentChapter[sid][cid]) progressByStudentChapter[sid][cid] = { submitted: 0, total: 0 };
+      progressByStudentChapter[sid][cid].total += 1;
+      if (data.status === "submitted") progressByStudentChapter[sid][cid].submitted += 1;
+    });
 
     const studentsById: Record<string, any> = {};
     studentsSnap.docs.forEach((d: any) => {
@@ -39,12 +53,19 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const items = Object.entries(byStudent).map(([userId, assignment]) => ({
-      student: studentsById[userId]
-        ? { id: userId, name: studentsById[userId].name || null, phone: studentsById[userId].phone || null }
-        : { id: userId, name: null, phone: null },
-      assignment,
-    }));
+    const items = Object.entries(byStudent).map(([userId, assignment]) => {
+      const chapterProgress = progressByStudentChapter[userId] || {};
+      const enrichedItems = (assignment.items || []).map((it: any) => ({
+        ...it,
+        progress: chapterProgress[it.chapterId] || null,
+      }));
+      return {
+        student: studentsById[userId]
+          ? { id: userId, name: studentsById[userId].name || null, phone: studentsById[userId].phone || null }
+          : { id: userId, name: null, phone: null },
+        assignment: { ...assignment, items: enrichedItems },
+      };
+    });
 
     // Also include students who have no assignment at all, so the admin
     // sees the full roster and who hasn't been assigned anything yet.
