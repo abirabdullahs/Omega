@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { getChapterName } from "@/lib/subjects";
 import { formatDate } from "@/lib/utils";
+import CurrentTopicCard from "@/components/current-topic-card";
 
 interface Task {
   id: string;
@@ -400,6 +401,9 @@ export default function StudentDashboard() {
           )}
         </div>
       </section>
+
+      {/* 1.5 Today's Topic (smart rotation) */}
+      <CurrentTopicCard />
 
       {/* 2. Running Chapters Section */}
       <section className="mt-8 space-y-4">

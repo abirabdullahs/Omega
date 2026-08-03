@@ -91,6 +91,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Study cycle (topic rotation state) — fully server-managed via
+    // /api/study-cycle so cursor/order math can't be tampered with from
+    // the client. No direct client access at all.
+    match /studyCycles/{studentId} {
+      allow read, write: if false;
+    }
+
     // Topics — students can only add topics via the server (so we can
     // validate the chapter is actually assigned to them and batch-create
     // safely from a comma-separated list). Students may rename their own
