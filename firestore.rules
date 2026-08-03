@@ -91,6 +91,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Topics — students can only add topics via the server (so we can
+    // validate the chapter is actually assigned to them and batch-create
+    // safely from a comma-separated list). Students may rename their own
+    // topics but never delete them; only admin can delete.
+    match /topics/{topicId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      allow create: if false;
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && resource.data.studentId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
     // Live sessions collection
     match /liveSessions/{sessionId} {
       allow read: if isSignedIn();
