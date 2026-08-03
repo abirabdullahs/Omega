@@ -15,15 +15,17 @@ import { useAuth } from "@/components/auth-provider";
 import Link from "next/link";
 import {
   BookOpen,
-  CheckCircle2,
   Clock,
   ChevronRight,
+  ChevronDown,
   Zap,
   History,
+  Sparkles,
 } from "lucide-react";
 import { getChapterName } from "@/lib/subjects";
 import { formatDate } from "@/lib/utils";
 import CurrentTopicCard from "@/components/current-topic-card";
+import { Loader } from "@/components/ui/loader";
 
 interface Task {
   id: string;
@@ -186,8 +188,9 @@ export default function StudentDashboard() {
   const [topicProgress, setTopicProgress] = useState<Record<string, { submitted: number; total: number }>>({});
   const [loading, setLoading] = useState(true);
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
 
   useEffect(() => {
     async function fetchData() {
@@ -299,22 +302,54 @@ export default function StudentDashboard() {
     ? getAssignmentItems(runningAssignment)
     : [];
 
+  // Dashboard only surfaces tasks that still need action — anything
+  // already submitted lives in "My Submissions" instead.
+  const activeTasks = tasks.filter((task) => !submissions[task.id]);
+
+  const firstName = (userData?.name || "").trim().split(/\s+/)[0] || null;
+
   if (loading) {
     return (
-      <div className="py-20 text-center text-neutral-400">
-        Loading your dashboard...
+      <div className="py-20">
+        <Loader label="Loading your dashboard…" className="text-neutral-900" />
       </div>
     );
   }
 
   return (
     <div className="space-y-10 pb-20">
-      {/* 1. Tasks Section */}
+      {/* 0. Welcome header + quick stats */}
+      <section className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">
+            {firstName ? `Welcome back, ${firstName}` : "Welcome back"}
+          </h1>
+          <p className="text-sm text-neutral-500 mt-1">Here&apos;s where things stand today.</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-neutral-100 bg-white p-4">
+            <p className="text-2xl font-bold text-neutral-900">{activeTasks.length}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-neutral-400 mt-0.5">Active tasks</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-100 bg-white p-4">
+            <p className="text-2xl font-bold text-neutral-900">{runningItems.length}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-neutral-400 mt-0.5">Running chapters</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-100 bg-white p-4">
+            <Sparkles className="h-5 w-5 text-violet-500" />
+            <p className="text-[11px] font-bold uppercase tracking-wide text-neutral-400 mt-1">Today&apos;s topic below</p>
+          </div>
+        </div>
+      </section>
+
+      {/* 1. Active Tasks Section — only what still needs action; completed
+          tasks live in My Submissions instead of cluttering the dashboard. */}
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-blue-500" />
-            <h2 className="text-xl font-bold text-neutral-900">Module Tasks</h2>
+            <h2 className="text-xl font-bold text-neutral-900">Active Tasks</h2>
           </div>
 
           <span className="text-sm text-neutral-500">
@@ -322,11 +357,16 @@ export default function StudentDashboard() {
           </span>
         </div>
 
+        {activeTasks.length === 0 ? (
+          <div className="space-y-3 rounded-3xl border border-dashed border-neutral-200 bg-white p-6 text-center sm:p-10">
+            <p className="font-medium text-neutral-500">You&apos;re all caught up — no active tasks right now.</p>
+            <Link href="/student/submissions" className="inline-block text-sm font-bold text-neutral-900 underline">
+              View past submissions →
+            </Link>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 gap-3">
-          {(showAllTasks ? tasks : tasks.slice(0, 5)).map((task) => {
-            const submission = submissions[task.id];
-            const isDone = !!submission;
-
+          {(showAllTasks ? activeTasks : activeTasks.slice(0, 5)).map((task) => {
             return (
               <Link
                 key={task.id}
@@ -338,18 +378,10 @@ export default function StudentDashboard() {
 
                 {/* Top row: Countdown on the top-left */}
                 <div className="mb-4 flex items-center justify-between gap-4">
-                  {!isDone && task.deadline ? (
+                  {task.deadline ? (
                     <TaskCountdown deadline={task.deadline} />
                   ) : (
-                    <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-100">
-                        <CheckCircle2 size={13} strokeWidth={2.5} />
-                      </div>
-
-                      <span className="text-[10px] font-extrabold uppercase tracking-[0.1em]">
-                        Completed
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">No deadline</span>
                   )}
 
                   <ChevronRight
@@ -360,18 +392,8 @@ export default function StudentDashboard() {
 
                 {/* Main Task Details */}
                 <div className="flex min-w-0 items-start gap-4">
-                  <div
-                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105 ${
-                      isDone
-                        ? "bg-emerald-50 text-emerald-600"
-                        : "bg-blue-50 text-blue-600"
-                    }`}
-                  >
-                    {isDone ? (
-                      <CheckCircle2 size={23} />
-                    ) : (
-                      <BookOpen size={23} />
-                    )}
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition-transform duration-300 group-hover:scale-105">
+                    <BookOpen size={23} />
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -380,11 +402,9 @@ export default function StudentDashboard() {
                         {task.title}
                       </h3>
 
-                      {!isDone && (
-                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-600">
-                          Open
-                        </span>
-                      )}
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-600">
+                        Open
+                      </span>
                     </div>
 
                     {task.contentMarkdown && (
@@ -392,25 +412,13 @@ export default function StudentDashboard() {
                         {task.contentMarkdown.replace(/[#*`>]/g, "")}
                       </p>
                     )}
-
-                    {isDone && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                          <CheckCircle2 size={12} />
-
-                          {submission.grade
-                            ? `Grade: ${submission.grade}`
-                            : "Submitted"}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </Link>
             );
           })}
 
-          {tasks.length > 5 && (
+          {activeTasks.length > 5 && (
             <button
               type="button"
               onClick={() => setShowAllTasks((value) => !value)}
@@ -420,6 +428,7 @@ export default function StudentDashboard() {
             </button>
           )}
         </div>
+        )}
       </section>
 
       {/* 1.5 Today's Topic (smart rotation) */}
@@ -519,13 +528,27 @@ export default function StudentDashboard() {
       {/* 3. History Section */}
       {pastAssignments.length > 0 && (
         <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-neutral-400" />
-            <h2 className="text-xl font-bold text-neutral-900">
-              Completed Chapters
-            </h2>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex w-full items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-2">
+              <History className="h-5 w-5 text-neutral-400" />
+              <h2 className="text-xl font-bold text-neutral-900">
+                Completed Chapters
+              </h2>
+              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-bold text-neutral-500">
+                {pastAssignments.length}
+              </span>
+            </span>
+            <ChevronDown
+              size={18}
+              className={`text-neutral-400 transition-transform ${showHistory ? "rotate-180" : ""}`}
+            />
+          </button>
 
+          {showHistory && (
           <div className="space-y-3">
             {pastAssignments.map((pastAssignment) => (
               <div
@@ -558,6 +581,7 @@ export default function StudentDashboard() {
               </div>
             ))}
           </div>
+          )}
         </section>
       )}
     </div>

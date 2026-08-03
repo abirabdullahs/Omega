@@ -60,7 +60,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   }
 
   const navItems = [
-    { name: "My Tasks", href: "/student", icon: BookOpen },
+    { name: "Dashboard", href: "/student", icon: BookOpen },
     { name: "Live Sessions", href: "/student/live-sessions", icon: CalendarDays },
     { name: "My Submissions", href: "/student/submissions", icon: CheckCircle2 },
     { name: "Live Chat", href: "/student/chat", icon: MessageSquare },
