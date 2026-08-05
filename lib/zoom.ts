@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { getAdminDb, getAdminInitError } from "@/lib/firebase-admin";
 
+
+
 const ZOOM_CLIENT_ID = process.env.ZOOM_CLIENT_ID || "";
 const ZOOM_CLIENT_SECRET = process.env.ZOOM_CLIENT_SECRET || "";
 const ZOOM_SDK_KEY = process.env.ZOOM_SDK_KEY || process.env.ZOOM_CLIENT_ID || "";
